@@ -92,3 +92,6 @@ docker compose pull && docker compose up -d   # the published image
 CI publishes `ghcr.io/fxi/projversor` from `main` (`latest`) and from `v*`
 tags, building zartigl from its `main` branch, or from the `ZARTIGL_REF`
 repository variable.
+
+The same demos are published to GitHub Pages from `main`
+(`https://fxi.github.io/projversor/`, `story/`, `site/`, `minimal/`).

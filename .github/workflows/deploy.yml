@@ -1,0 +1,73 @@
+name: Deploy demos to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  # zartigl is built beside projversor (file:../zartigl); the ZARTIGL_REF
+  # repository variable picks another branch or tag than main.
+  ZARTIGL_REF: ${{ vars.ZARTIGL_REF || 'main' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: projversor
+      - uses: actions/checkout@v4
+        with:
+          repository: fxi/zartigl
+          ref: ${{ env.ZARTIGL_REF }}
+          path: zartigl
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            projversor/package-lock.json
+            zartigl/package-lock.json
+      - run: npm ci --prefix zartigl --ignore-scripts
+      - run: npm run --prefix zartigl build:lib
+      - run: npm ci --ignore-scripts
+        working-directory: projversor
+      - run: npm run typecheck
+        working-directory: projversor
+      - run: npm test
+        working-directory: projversor
+      # Bases match https://<owner>.github.io/projversor/: the explorer at
+      # the root, the other demos in their folders.
+      - run: npm run build:demos
+        working-directory: projversor
+      - run: |
+          mkdir -p dist-pages
+          cp -R dist-projection/. dist-pages/
+          for demo in story site minimal; do
+            mkdir -p "dist-pages/$demo"
+            cp -R "dist-$demo/." "dist-pages/$demo/"
+          done
+        working-directory: projversor
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: projversor/dist-pages
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
