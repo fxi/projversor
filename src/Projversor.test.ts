@@ -291,8 +291,11 @@ describe("Projversor", () => {
   it("applies a view style over the layer's, and drops it with the next view", async () => {
     const p = new Projversor(canvases());
     const particles = () =>
-      (p as unknown as { particleSettings: { density: number; speed: number } })
-        .particleSettings;
+      (
+        p as unknown as {
+          fields: { particleSettings: { density: number; speed: number } };
+        }
+      ).fields.particleSettings;
     const opened = p.apply(
       { layer: "surface-wind", style: { particles: { density: 0.12 } } },
       { animate: false },
@@ -317,8 +320,8 @@ describe("Projversor", () => {
   it("styles a layer opening in the background with its own view style", async () => {
     const p = new Projversor(canvases());
     const density = () =>
-      (p as unknown as { particleSettings: { density: number } })
-        .particleSettings.density;
+      (p as unknown as { fields: { particleSettings: { density: number } } })
+        .fields.particleSettings.density;
     const opened = p.apply(
       { layer: "surface-wind", style: { particles: { density: 0.12 } } },
       { animate: false },
@@ -490,7 +493,7 @@ describe("Projversor", () => {
     await flush();
     resolveMonth(WIND, "feb");
     await opened;
-    const internal = p as unknown as { settle: number };
+    const internal = (p as unknown as { fields: { settle: number } }).fields;
     internal.settle = 0;
     await p.apply(
       { layer: "surface-wind", style: { particles: { fade: 0.9 } } },
