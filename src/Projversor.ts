@@ -1,194 +1,231 @@
-import { feature } from "topojson-client";
-import type { GeometryCollection, Topology } from "topojson-specification";
-import land110 from "world-atlas/land-110m.json";
-import {
-  mergeStyles,
-  sourceCoversTime,
-  styleForKind,
-  type CatalogGeoVideoSource,
-  type LayerStyleInput,
+import type {
+  CatalogGeoVideoSource,
+  LayerStyleInput,
 } from "@fxi/zartigl/catalog";
-import {
-  colorGradeToGrade,
-  gradeToColorGrade,
-  loadGeoVideoManifest,
-  type ColorGrade,
-} from "@fxi/zartigl/engine";
-import {
-  Camera,
-  VIEW_MS,
-  clampZoom,
-  type ProjversorViewTarget,
-  type Rotate,
-} from "./Camera";
-import { Clock } from "./Clock";
+import { gradeToColorGrade } from "@fxi/zartigl/engine";
+import type { Camera, Rotate } from "./Camera";
+import { Emitter } from "./emitter";
 import {
   FieldLayer,
   checkStyle,
   type FieldLayerEvents,
   type ProjversorMonth,
 } from "./FieldLayer";
-import {
-  PROJVERSOR_LAYERS,
-  TINT_LAYERS,
-  findLayer,
-  loadChunks,
-  type ProjversorLayer,
-} from "./layers";
-import { Overlay } from "./Overlay";
-import type { Preset } from "./presets";
-import type { LegacyShareState, ShareState } from "./share";
-import { SphereParticles } from "./SphereParticles";
-import { SphereScalar } from "./SphereScalar";
-import { regionView, viewFrame, type Inset, type ViewFrame } from "./view";
+import { findLayer, type ProjversorLayer } from "./layers";
+import { Stage, type StageEvents, type StageInitial } from "./Stage";
+import type { Inset } from "./view";
 
-export {
-  TRANSITION_MS,
-  VIEW_MS,
-  clampZoom,
-  type ProjversorViewTarget,
-} from "./Camera";
-export { SPEEDS } from "./Clock";
-export { STYLE_SUPPORT, type ProjversorMonth } from "./FieldLayer";
+/** Layer types and the catalog kind of their source. */
+const SOURCE_KIND = { particles: "vector", scalar: "scalar" } as const;
 
-/** The camera counts as moving until its view rests this long. */
-const MOVE_SETTLE_MS = 100;
+export type ProjversorLayerType = keyof typeof SOURCE_KIND;
 
-const warned = new Set<string>();
-
-/**
- * The deprecated flat `palette` and `grade` of a state, as a style, with a
- * one-time warning each.
- */
-function legacyStyle(state: LegacyShareState): LayerStyleInput | undefined {
-  const { palette, grade } = state;
-  const moved = { palette: "style.palette", grade: "style.particles.grade" };
-  for (const key of ["palette", "grade"] as const) {
-    if (state[key] !== undefined && !warned.has(key)) {
-      warned.add(key);
-      console.warn(`projversor state.${key} is deprecated: use ${moved[key]}`);
-    }
-  }
-  return palette === undefined && grade === undefined
-    ? undefined
-    : mergeStyles({
-        palette,
-        particles: { grade: grade && colorGradeToGrade(grade) },
-      });
+/** A GeoVideo layer from the catalog. */
+export interface FieldLayerConfig {
+  /** Projversor layer id, or catalog entry id, with a GeoVideo archive. */
+  source: string;
+  /**
+   * Particles only: scalar entry id coloring them, null for speed colors.
+   * Default: the source layer's own tint, if any.
+   */
+  tint?: string | null;
+  /** Style over the source's own: palette, particles, raster. */
+  style?: LayerStyleInput;
 }
 
-/** The stage and its three stacked canvases: land below, GL, lines above. */
-export interface ProjversorCanvases {
-  stage: HTMLElement;
-  back: HTMLCanvasElement;
-  gl: HTMLCanvasElement;
-  front: HTMLCanvasElement;
+export interface ProjversorOptions extends StageInitial {
+  /** Playhead, epoch ms. Default: the latest month of the first layer. */
+  time?: number;
+  /** Drag, pinch and wheel on the view. Default true. */
+  interactive?: boolean;
+}
+
+/** View and playback; omitted keys keep their value. */
+export interface ProjversorState {
+  /** Projection preset id: morphs to it, with its rotation and zoom. */
+  preset?: string;
+  rotate?: Rotate;
+  zoom?: number;
+  /** Free zone the sphere is centered and fitted in, css px. */
+  inset?: Inset;
+  /** Ease the view (default), or jump to it. */
+  animate?: boolean;
+  durationMs?: number;
+  /** Playhead, epoch ms. */
+  time?: number;
+  playing?: boolean;
+  /** Playback speed multiplier, one of SPEEDS for the clock layer's kind. */
+  speed?: number;
 }
 
 /** Events and their payloads. */
-export interface ProjversorEvents extends FieldLayerEvents {
-  playing: boolean;
-  preset: Preset;
-  north: boolean;
-  /** After each drawn frame. */
-  frame: undefined;
+export interface ProjversorEvents extends StageEvents {
+  /** Loading progress of a layer; "" once it shows. */
+  status: { id: string; text: string };
+  /** A month of a layer was decoded and is displayed. */
+  month: { id: string; month: ProjversorMonth };
+  palette: { id: string; palette: string };
 }
 
-export function isTintEntry(id: string | undefined): id is string {
-  return TINT_LAYERS.some((l) => l.entryId === id);
+/** The view controls of a projversor. */
+export type ProjversorView = Pick<
+  Camera,
+  | "preset"
+  | "rotate"
+  | "zoom"
+  | "bearing"
+  | "northLocked"
+  | "inset"
+  | "goTo"
+  | "jumpTo"
+  | "easeTo"
+  | "zoomBy"
+  | "rotateBy"
+  | "setBearing"
+  | "toggleNorth"
+  | "target"
+  | "setInset"
+  | "northAngle"
+  | "outline"
+>;
+
+/** A layer added to a projversor. */
+export class ProjversorLayerHandle {
+  constructor(
+    readonly id: string,
+    readonly type: ProjversorLayerType,
+    private readonly field: FieldLayer,
+  ) {}
+
+  /** The source layer: label, kind, catalog entry. */
+  get source(): ProjversorLayer {
+    return this.field.layer;
+  }
+
+  get palette(): string {
+    return this.field.palette;
+  }
+
+  /** Scalar entry id coloring the particles, or null. */
+  get tint(): string | null {
+    return this.field.tintId;
+  }
+
+  /** Month chunks of the archive and the displayed one. */
+  get chunks(): readonly CatalogGeoVideoSource[] {
+    return this.field.chunks;
+  }
+
+  get chunkIndex(): number {
+    return this.field.chunkIndex;
+  }
+
+  /** Frame times of the displayed month. */
+  get times(): readonly number[] {
+    return this.field.times;
+  }
+
+  /** True for the layer whose months drive the playhead. */
+  get driving(): boolean {
+    return this.field.driving;
+  }
+
+  /** Replace the style override over the source's own (`{}` clears it). */
+  async update(style: LayerStyleInput): Promise<void> {
+    const field = this.field;
+    checkStyle(style, field.layer);
+    field.restyle(style);
+    const palette = field.stylePalette(field.layer);
+    if (palette !== field.palette) {
+      field.applyPalette(palette);
+    }
+  }
 }
 
-const landFeature = (topology: unknown) => {
-  const t = topology as Topology<{ land: GeometryCollection }>;
-  return feature(t, t.objects.land);
-};
+interface Entry {
+  type: ProjversorLayerType;
+  field: FieldLayer;
+  handle: ProjversorLayerHandle;
+}
 
 /**
- * GeoVideo archives on a sphere that morphs between projections: particles
- * for vector layers, a raster for scalar ones. Owns the GL context and the
- * frame loop; the view is the {@link Camera}'s, the playhead the
- * {@link Clock}'s, the shown layer the {@link FieldLayer}'s. Controls stay
- * with the caller.
+ * Catalog layers on a sphere that morphs between world projections, for
+ * standalone pages and stories:
+ *
+ * ```ts
+ * const pv = new Projversor(root, { preset: "globe" });
+ * await pv.init();
+ * await pv.add("currents", "particles", { source: "ocean-current-velocity" });
+ * await pv.update({ preset: "world", playing: true });
+ * ```
+ *
+ * The first layer added drives the playhead through its months; the others
+ * follow it. One particles layer at a time.
  */
 export class Projversor {
-  private readonly gl: WebGL2RenderingContext;
-  private readonly particles: SphereParticles;
-  private readonly raster: SphereScalar;
-  private readonly overlay: Overlay;
-  private readonly camera: Camera;
-  private readonly clock: Clock;
-  private readonly fields: FieldLayer;
-  private readonly listeners = new Map<string, Set<(detail: never) => void>>();
-  private readonly resizer: ResizeObserver;
-  private frameId = 0;
+  private readonly events = new Emitter<ProjversorEvents>();
+  private readonly layers = new Map<string, Entry>();
+  private stage: Stage | null = null;
+  private detach: (() => void) | null = null;
+  private canvases: HTMLCanvasElement[] = [];
   private destroyed = false;
-  private dpr = 1;
-  private overlayKey = "";
-  private lastMove = 0;
-  private detailed = false;
-  private last = 0;
+  /** The playhead was set: layers open at it, else at their latest month. */
+  private timeSet: boolean;
 
   constructor(
-    private readonly canvases: ProjversorCanvases,
-    initial: Partial<ShareState> = {},
+    private readonly root: HTMLElement,
+    private readonly options: ProjversorOptions = {},
   ) {
-    // Premultiplied canvas, composited with view.ts compositeBlend.
-    const gl = canvases.gl.getContext("webgl2", {
-      antialias: true,
-      depth: true,
-    });
-    if (!gl) {
-      throw new Error("WebGL2 is required");
+    this.timeSet = options.time !== undefined;
+  }
+
+  /**
+   * Create the canvases in the root and the GL context, and start drawing.
+   * Resolves once the detailed coastlines are in use.
+   */
+  async init(): Promise<void> {
+    if (this.destroyed) {
+      throw new Error("projversor: destroyed");
     }
-    this.gl = gl;
-    this.particles = new SphereParticles(gl);
-    this.raster = new SphereScalar(gl);
-    this.overlay = new Overlay(canvases.back, canvases.front, {
-      land: landFeature(land110),
-    });
-    // The finer coastline is ten times heavier: load it after first paint.
-    import("world-atlas/land-50m.json")
-      .then(({ default: land50 }) => {
-        if (!this.destroyed) {
-          this.overlay.setLandDetail(landFeature(land50));
-          this.detailed = false;
+    if (this.stage) {
+      return;
+    }
+    const root = this.root;
+    const doc = root.ownerDocument;
+    if (doc.defaultView?.getComputedStyle(root).position === "static") {
+      root.style.position = "relative";
+    }
+    const canvas = () => {
+      const c = doc.createElement("canvas");
+      c.style.cssText =
+        "position: absolute; inset: 0; width: 100%; height: 100%";
+      root.append(c);
+      return c;
+    };
+    const [back, gl, front] = [canvas(), canvas(), canvas()];
+    this.canvases = [back, gl, front];
+    const stage = new Stage(
+      { stage: root, back, gl, front },
+      this.events,
+      this.options,
+    );
+    this.stage = stage;
+    if (this.options.time !== undefined) {
+      stage.clock.ms = this.options.time;
+    }
+    stage.start({
+      advance: (dt) => this.driver()?.advanceTime(dt),
+      draw: (frame, now, moving) => {
+        for (const { field } of this.layers.values()) {
+          field.follow();
+          field.draw(frame, now, moving);
         }
-      })
-      .catch(() => {});
-    this.camera = new Camera(
-      {
-        project: (frame) => this.overlay.setView(frame),
-        preset: (preset) => this.emit("preset", preset),
-        north: (locked) => this.emit("north", locked),
-        refit: () => {
-          this.overlayKey = "";
-        },
       },
-      initial,
-    );
-    this.clock = new Clock(initial.playing ?? true, (playing) =>
-      this.emit("playing", playing),
-    );
-    this.fields = new FieldLayer(
-      gl,
-      this.clock,
-      this.particles,
-      this.raster,
-      {
-        // ProjversorEvents extends FieldLayerEvents: the same payload types.
-        emit: (type, detail) =>
-          this.emit(type, detail as ProjversorEvents[typeof type]),
-        shown: (layer) => {
-          this.overlay.fillLand = layer.fillLand;
-          this.overlayKey = "";
-        },
-      },
-      gradeToColorGrade(initial.style?.particles?.grade),
-    );
-    this.resizer = new ResizeObserver(() => this.resize());
-    this.resizer.observe(canvases.stage);
-    this.resize();
-    this.frameId = requestAnimationFrame((now) => this.tick(now));
+    });
+    if (this.options.interactive ?? true) {
+      this.detach = stage.attachInteraction();
+    }
+    await stage.landDetail;
   }
 
   // ---- events ------------------------------------------------------------
@@ -198,430 +235,210 @@ export class Projversor {
     type: K,
     listener: (detail: ProjversorEvents[K]) => void,
   ): () => void {
-    let set = this.listeners.get(type);
-    if (!set) {
-      set = new Set();
-      this.listeners.set(type, set);
-    }
-    set.add(listener as (detail: never) => void);
-    return () => set.delete(listener as (detail: never) => void);
+    return this.events.on(type, listener);
   }
 
-  private emit<K extends keyof ProjversorEvents>(
+  // ---- layers ------------------------------------------------------------
+
+  /**
+   * Add a catalog layer on top of the others; resolves once its first
+   * frame is decoded. Rejects for an unknown source, a source of another
+   * kind than `type`, or a second particles layer.
+   */
+  async add(
+    id: string,
+    type: ProjversorLayerType,
+    config: FieldLayerConfig,
+  ): Promise<ProjversorLayerHandle> {
+    const stage = this.requireStage();
+    if (this.layers.has(id)) {
+      throw new Error(`projversor: layer "${id}" already exists`);
+    }
+    if (!(type in SOURCE_KIND)) {
+      throw new Error(`projversor: unknown layer type "${type}"`);
+    }
+    const layer = findLayer(config.source);
+    if (!layer) {
+      throw new Error(`projversor: unknown source "${config.source}"`);
+    }
+    if (layer.kind !== SOURCE_KIND[type]) {
+      throw new Error(
+        `projversor: "${config.source}" is a ${layer.kind} source, not ${type}`,
+      );
+    }
+    if (type === "particles" && this.has("particles")) {
+      throw new Error("projversor: one particles layer at a time");
+    }
+    checkStyle(config.style, layer);
+    const field = new FieldLayer(
+      stage.gl,
+      stage.clock,
+      stage.particles,
+      stage.raster,
+      {
+        emit: (event, detail) => this.relay(id, event, detail),
+        shown: () => this.updateLandFill(),
+      },
+      gradeToColorGrade(config.style?.particles?.grade),
+    );
+    field.driving = !this.driver();
+    const handle = new ProjversorLayerHandle(id, type, field);
+    this.layers.set(id, { type, field, handle });
+    try {
+      await field.open(layer, {
+        at: this.timeSet ? stage.clock.ms : undefined,
+        tint: config.tint,
+        style: config.style,
+      });
+    } catch (error) {
+      this.drop(id);
+      throw error;
+    }
+    this.timeSet = true;
+    return handle;
+  }
+
+  /** The layer added as `id`. */
+  get(id: string): ProjversorLayerHandle | undefined {
+    return this.layers.get(id)?.handle;
+  }
+
+  /** Ids of the layers, bottom first. */
+  get ids(): string[] {
+    return [...this.layers.keys()];
+  }
+
+  /** Remove a layer; the next one drives the playhead if it did. */
+  async remove(id: string): Promise<void> {
+    this.drop(id);
+  }
+
+  private drop(id: string): void {
+    const entry = this.layers.get(id);
+    if (!entry) {
+      return;
+    }
+    this.layers.delete(id);
+    entry.field.destroy();
+    if (entry.field.driving) {
+      const next = this.layers.values().next().value;
+      if (next) {
+        next.field.driving = true;
+        void next.field.seek(this.requireStage().clock.ms);
+      }
+    }
+    this.updateLandFill();
+  }
+
+  private has(type: ProjversorLayerType): boolean {
+    return [...this.layers.values()].some((e) => e.type === type);
+  }
+
+  /** The layer whose months drive the playhead. */
+  private driver(): FieldLayer | undefined {
+    for (const { field } of this.layers.values()) {
+      if (field.driving) {
+        return field;
+      }
+    }
+    return undefined;
+  }
+
+  /** Land is drawn opaque unless a shown layer also covers land. */
+  private updateLandFill(): void {
+    const fill = [...this.layers.values()].every(
+      ({ field }) => !field.opened || field.layer.fillLand,
+    );
+    this.stage?.setFillLand(fill);
+  }
+
+  private relay<K extends keyof FieldLayerEvents>(
+    id: string,
     type: K,
-    detail: ProjversorEvents[K],
+    detail: FieldLayerEvents[K],
   ): void {
-    for (const listener of this.listeners.get(type) ?? []) {
-      (listener as (detail: ProjversorEvents[K]) => void)(detail);
+    if (type === "status") {
+      this.events.emit("status", { id, text: detail as string });
+    } else if (type === "month") {
+      this.events.emit("month", { id, month: detail as ProjversorMonth });
+    } else if (type === "palette") {
+      this.events.emit("palette", { id, palette: detail as string });
     }
   }
 
-  // ---- state -------------------------------------------------------------
+  // ---- view and playback -------------------------------------------------
 
-  get layer(): ProjversorLayer {
-    return this.fields.layer;
-  }
-
-  /** Scalar entry id coloring the particles, or null. */
-  get tintId(): string | null {
-    return this.fields.tintId;
-  }
-
-  get palette(): string {
-    return this.fields.palette;
-  }
-
-  get grade(): ColorGrade {
-    return this.fields.grade;
-  }
-
-  get preset(): Preset {
-    return this.camera.preset;
-  }
-
-  get playing(): boolean {
-    return this.clock.playing;
-  }
-
-  /** Playback speed multiplier of the open layer. */
-  get speed(): number {
-    return this.fields.speed;
-  }
-
-  /** Month chunks of the open layer and the displayed one. */
-  get chunks(): readonly CatalogGeoVideoSource[] {
-    return this.fields.chunks;
-  }
-
-  get chunkIndex(): number {
-    return this.fields.chunkIndex;
+  /** View controls: presets, easing, bearing, free zone, outline. */
+  get view(): ProjversorView {
+    return this.requireStage().camera;
   }
 
   /** Playhead, epoch ms. */
   get time(): number {
-    return this.clock.ms;
+    return this.requireStage().clock.ms;
   }
 
-  /** Frame times of the displayed month. */
-  get times(): readonly number[] {
-    return this.fields.times;
+  get playing(): boolean {
+    return this.requireStage().clock.playing;
   }
 
-  /** Playhead position in the displayed month, 0–1. */
-  get progress(): number {
-    const times = this.times;
-    if (times.length < 2) {
-      return 0;
-    }
-    return (this.clock.ms - times[0]) / (times[times.length - 1] - times[0]);
-  }
-
-  get rotate(): Rotate {
-    return this.camera.rotate;
-  }
-
-  get zoom(): number {
-    return this.camera.zoom;
-  }
-
-  get bearing(): number {
-    return this.camera.bearing;
-  }
-
-  /** Drags keep north up (gamma 0), as d3-geo-zoom's northUp. */
-  get northLocked(): boolean {
-    return this.camera.northLocked;
-  }
-
-  set northLocked(locked: boolean) {
-    this.camera.northLocked = locked;
-  }
-
-  /** Everything needed to reproduce the displayed view. */
-  getState(): ShareState {
-    const layer = this.fields.layer;
-    return {
-      layer: layer.id,
-      time: this.clock.ms,
-      preset: this.camera.preset.id,
-      rotate: [...this.camera.rotate],
-      zoom: this.camera.zoom,
-      playing: this.clock.playing,
-      speed: this.speed,
-      tint: this.fields.tintId ?? "",
-      style: styleForKind(this.fields.viewStyle, layer.kind),
-    };
-  }
-
-  /**
-   * Show a state: unknown ids fall back to the layer's own choices. The
-   * layer reopens only when it or its tint changes. A view in the state
-   * keeps its own framing, else a regional layer is framed. A `style`
-   * replaces the previous override over the layer's own style (`{}` clears
-   * it) once the layer shows; without one, the current override stays.
-   * The deprecated flat `palette` and `grade` patch it, `style` winning.
-   */
-  async apply(
-    state: Partial<ShareState> & LegacyShareState,
-    options: { animate?: boolean; durationMs?: number } = {},
-  ): Promise<void> {
-    const { animate = true, durationMs } = options;
-    const fields = this.fields;
-    const layer =
-      findLayer(state.layer) ??
-      (fields.opened ? fields.layer : PROJVERSOR_LAYERS[0]);
-    checkStyle(state.style, layer);
-    const legacy = legacyStyle(state);
-    const style =
-      legacy === undefined
-        ? state.style
-        : styleForKind(
-            state.style === undefined
-              ? mergeStyles(fields.viewStyle, legacy)
-              : mergeStyles(legacy, state.style),
-            layer.kind,
-          );
-    const hasView =
-      state.preset !== undefined ||
-      state.rotate !== undefined ||
-      state.zoom !== undefined;
-    if (hasView) {
-      const target = { ...state, durationMs };
+  /** Change the view and playback; a preset morphs the projection. */
+  async update(state: ProjversorState): Promise<void> {
+    const stage = this.requireStage();
+    const { animate = true, durationMs } = state;
+    const { preset, rotate, zoom, inset } = state;
+    if (
+      preset !== undefined ||
+      rotate !== undefined ||
+      zoom !== undefined ||
+      inset !== undefined
+    ) {
+      const target = { preset, rotate, zoom, inset, durationMs };
       if (animate) {
-        this.goTo(target);
+        stage.camera.goTo(target);
       } else {
-        this.jumpTo(target);
+        stage.camera.jumpTo(target);
       }
     }
     if (state.playing !== undefined) {
-      this.setPlaying(state.playing);
+      stage.clock.setPlaying(state.playing);
     }
-    // "" is "no tint"; unknown ids fall back to the layer's own.
-    const tintOption =
-      state.tint === ""
-        ? null
-        : isTintEntry(state.tint)
-          ? state.tint
-          : undefined;
-    const tint =
-      layer.kind === "vector"
-        ? tintOption === undefined
-          ? (layer.tint ?? null)
-          : tintOption
-        : null;
-    if (
-      !fields.opened ||
-      layer.id !== fields.layer.id ||
-      tint !== fields.tintId
-    ) {
-      await this.open(layer, {
-        at: state.time,
-        tint,
-        speed: state.speed,
-        frame: !hasView,
-        style,
-      });
-      return;
+    const driver = this.driver();
+    if (state.speed !== undefined && driver) {
+      stage.clock.setKindSpeed(driver.layer.kind, state.speed);
     }
-    if (style !== undefined) {
-      fields.restyle(style);
-      const palette = fields.stylePalette(layer);
-      if (palette !== fields.palette) {
-        fields.applyPalette(palette);
+    if (state.time !== undefined) {
+      if (driver) {
+        await driver.seek(state.time);
+      } else {
+        stage.clock.ms = state.time;
+        this.timeSet = true;
       }
     }
-    this.clock.setKindSpeed(layer.kind, state.speed);
-    if (state.time !== undefined) {
-      await this.seek(state.time);
-    }
   }
 
-  // ---- layers (see FieldLayer) -------------------------------------------
-
-  /**
-   * Switch layer, opening the month that holds `at`, else the displayed
-   * month when the archive has it, else the latest. The palette is the
-   * view style's, else the layer's own; the tint defaults to the layer's.
-   * `frame` centers the view on a regional layer. The style applies once
-   * the layer shows.
-   */
-  async open(
-    layerOrId: ProjversorLayer | string,
-    options: {
-      at?: number;
-      tint?: string | null;
-      /** Playback speed, applied with the layer when it is one of its kind. */
-      speed?: number;
-      frame?: boolean;
-      /** Style override replacing the current one. */
-      style?: LayerStyleInput;
-    } = {},
-  ): Promise<void> {
-    const { frame = true, ...rest } = options;
-    const shown = await this.fields.open(layerOrId, rest);
-    const bounds = this.fields.bounds;
-    const region =
-      shown && frame && bounds ? regionView(bounds, this.camera.view) : null;
-    if (region) {
-      this.camera.easeTo(region.rotate, clampZoom(region.zoom));
-    }
-  }
-
-  /** Open month `index` of the open layer at its start. */
-  openMonth(index: number): Promise<void> {
-    return this.fields.openMonth(index);
-  }
-
-  /** Move the playhead, opening the month that holds `ms` when needed. */
-  seek(ms: number): Promise<void> {
-    return this.fields.seek(ms);
-  }
-
-  /** Move the playhead within the displayed month. */
-  scrub(ms: number): void {
-    this.fields.scrub(ms);
-  }
-
-  /**
-   * Warm the HTTP cache with a layer's index and the manifest of the month
-   * holding `at`, so a later {@link open} starts sooner.
-   */
-  async preload(layerId: string, at?: number): Promise<void> {
-    const layer = findLayer(layerId);
-    if (!layer) {
-      return;
-    }
-    const chunks = await loadChunks(layer.entryId);
-    const chunk =
-      (at === undefined
-        ? undefined
-        : chunks.find((c) => sourceCoversTime(c, { time: at }))) ??
-      chunks[chunks.length - 1];
-    if (chunk) {
-      await loadGeoVideoManifest(chunk.manifestUrl);
-    }
-  }
-
-  // ---- styling and playback ----------------------------------------------
-
-  /** Set the view style's palette, shown when the layer offers it. */
-  setPalette(id: string): void {
-    this.fields.setPalette(id);
-  }
-
-  /** Set the view style's particle grade. */
-  setGrade(grade: ColorGrade): void {
-    this.fields.setGrade(grade);
-  }
-
-  /** Playback speed multiplier of the open layer's kind. */
-  setSpeed(speed: number): void {
-    this.fields.setSpeed(speed);
-  }
-
-  setPlaying(playing: boolean): void {
-    this.clock.setPlaying(playing);
-  }
-
-  /** Hold playback, e.g. while a timeline thumb is held. */
-  setHeld(held: boolean): void {
-    this.clock.held = held;
-  }
-
-  // ---- view (see Camera) -------------------------------------------------
-
-  goTo(target: ProjversorViewTarget): void {
-    this.camera.goTo(target);
-  }
-
-  jumpTo(target: ProjversorViewTarget): void {
-    this.camera.jumpTo(target);
-  }
-
-  easeTo(rotate: Rotate, zoom: number, duration = VIEW_MS): void {
-    this.camera.easeTo(rotate, zoom, duration);
-  }
-
-  zoomBy(factor: number): void {
-    this.camera.zoomBy(factor);
-  }
-
-  rotateBy(deg: number): void {
-    this.camera.rotateBy(deg);
-  }
-
-  setBearing(deg: number): void {
-    this.camera.setBearing(deg);
-  }
-
-  toggleNorth(): void {
-    this.camera.toggleNorth();
-  }
-
-  target(): { rotate: Rotate; zoom: number } {
-    return this.camera.target();
-  }
-
-  setInset(inset: Inset, durationMs = VIEW_MS): void {
-    this.camera.setInset(inset, durationMs);
-  }
-
-  get inset(): Inset {
-    return this.camera.inset;
-  }
-
-  northAngle(): number | null {
-    return this.camera.northAngle();
-  }
-
-  outline(): [number, number][] {
-    return this.camera.outline();
-  }
-
-  private resize(): void {
-    const { stage, back, gl, front } = this.canvases;
-    const { clientWidth: width, clientHeight: height } = stage;
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
-    for (const canvas of [back, gl, front]) {
-      canvas.width = Math.round(width * this.dpr);
-      canvas.height = Math.round(height * this.dpr);
-    }
-    this.camera.resize(width, height);
-    this.particles.resize(gl.width, gl.height);
-  }
-
-  /**
-   * Versor drag, pinch and wheel zoom on the front canvas; the stage gets
-   * the `dragging` class during a drag. Returns the detach function.
-   */
-  attachInteraction(): () => void {
-    return this.camera.attachInteraction(
-      this.canvases.stage,
-      this.canvases.front,
-    );
-  }
-
-  // ---- frame -------------------------------------------------------------
-
-  private tick(now: number): void {
-    if (this.destroyed) {
-      return;
-    }
-    const dt = this.last ? Math.min(0.1, (now - this.last) / 1000) : 0;
-    this.last = now;
-    this.camera.animate(now);
-    this.fields.advanceTime(dt);
-    const frame = viewFrame(this.camera.view);
-    this.drawOverlay(frame, now);
-    this.drawField(frame, now);
-    this.emit("frame", undefined);
-    this.frameId = requestAnimationFrame((t) => this.tick(t));
-  }
-
-  /** Clear the GL canvas, then draw the open field. */
-  private drawField(frame: ViewFrame, now: number): void {
-    const gl = this.gl;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    this.fields.draw(frame, now, now - this.lastMove < MOVE_SETTLE_MS);
-  }
-
-  /** Coastlines and graticule: coarse while the view moves, then detailed. */
-  private drawOverlay(frame: ViewFrame, now: number): void {
-    const key = JSON.stringify([
-      frame.rotate,
-      frame.zoom,
-      frame.blend.t,
-      frame.blend.a.id,
-      frame.blend.b.id,
-      frame.width,
-      frame.height,
-      frame.inset,
-    ]);
-    if (key !== this.overlayKey) {
-      this.overlayKey = key;
-      this.lastMove = now;
-      this.detailed = false;
-      this.overlay.draw(frame, this.dpr, false);
-    } else if (!this.detailed && now - this.lastMove > 180) {
-      this.detailed = true;
-      this.overlay.draw(frame, this.dpr, true);
-    }
-  }
-
-  /** Stop the frame loop and free GL resources and listeners. */
+  /** Stop drawing, free the GL resources and remove the canvases. */
   destroy(): void {
     if (this.destroyed) {
       return;
     }
     this.destroyed = true;
-    cancelAnimationFrame(this.frameId);
-    this.resizer.disconnect();
-    this.fields.destroy();
-    this.particles.destroy();
-    this.raster.destroy();
-    this.listeners.clear();
+    for (const { field } of this.layers.values()) {
+      field.destroy();
+    }
+    this.layers.clear();
+    this.detach?.();
+    this.stage?.destroy();
+    for (const canvas of this.canvases) {
+      canvas.remove();
+    }
+    this.events.clear();
+  }
+
+  private requireStage(): Stage {
+    if (!this.stage || this.destroyed) {
+      throw new Error("projversor: call init() first");
+    }
+    return this.stage;
   }
 }

@@ -5,8 +5,8 @@ import {
   SPEEDS,
   STYLE_SUPPORT,
   isTintEntry,
-  type Projversor,
-} from "./Projversor";
+  type LegacyProjversor,
+} from "./LegacyProjversor";
 import type { ShareState } from "./share";
 
 /**
@@ -257,7 +257,7 @@ export class ProjversorStoryView {
    * @param onError Reports a failed time seek.
    */
   constructor(
-    private readonly projversor: Projversor,
+    private readonly projversor: LegacyProjversor,
     private readonly animate = true,
     private readonly onError: (error: unknown) => void = console.error,
   ) {}

@@ -1,7 +1,7 @@
 import {
   PRESETS,
   PROJVERSOR_LAYERS,
-  Projversor,
+  LegacyProjversor as Projversor,
   SPEEDS,
   TINT_LAYERS,
   chunkLabel,

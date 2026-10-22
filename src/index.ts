@@ -2,20 +2,29 @@
  * projversor: GeoVideo archives on a sphere that morphs between world
  * projections, independent of MapLibre. Published as `@fxi/projversor`.
  */
+export { Projversor, ProjversorLayerHandle } from "./Projversor";
+export type {
+  FieldLayerConfig,
+  ProjversorEvents,
+  ProjversorLayerType,
+  ProjversorOptions,
+  ProjversorState,
+  ProjversorView,
+} from "./Projversor";
 export {
-  Projversor,
+  LegacyProjversor,
   SPEEDS,
   TRANSITION_MS,
   VIEW_MS,
   clampZoom,
   isTintEntry,
-} from "./Projversor";
+} from "./LegacyProjversor";
 export type {
+  LegacyProjversorEvents,
   ProjversorCanvases,
-  ProjversorEvents,
   ProjversorMonth,
   ProjversorViewTarget,
-} from "./Projversor";
+} from "./LegacyProjversor";
 export { PRESETS, findPreset } from "./presets";
 export type { Preset } from "./presets";
 export { PROJECTIONS } from "./projections";

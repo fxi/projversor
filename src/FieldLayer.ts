@@ -150,6 +150,15 @@ export class FieldLayer {
   /** Bumped on every layer or month switch; stale loads drop out. */
   private loadId = 0;
   private pendingRespawn = false;
+  /** A follower's month load in flight. */
+  private following = false;
+  /** Playhead of the last drawn frame, for a follower's paused redraw. */
+  private lastMs = Number.NaN;
+  /**
+   * The layer drives the clock: its months set the playhead, playback
+   * advances through them. Other layers follow the playhead.
+   */
+  driving = true;
 
   constructor(
     private readonly gl: WebGL2RenderingContext,
@@ -346,6 +355,36 @@ export class FieldLayer {
     this.settle = this.settleFrames();
   }
 
+  /**
+   * A layer that does not drive the clock: open the month holding the
+   * playhead once it leaves the displayed one. The displayed month shows its
+   * edge frame meanwhile.
+   */
+  follow(): void {
+    const ms = this.clock.ms;
+    const times = this.times;
+    if (
+      this.driving ||
+      !this.openedValue ||
+      this.following ||
+      (times.length && ms >= times[0] && ms <= times[times.length - 1])
+    ) {
+      return;
+    }
+    const chunk = this.chunksValue.find((c) =>
+      sourceCoversTime(c, { time: ms }),
+    );
+    if (!chunk || chunk === this.chunksValue[this.chunkIndexValue]) {
+      return;
+    }
+    this.following = true;
+    this.openChunk(chunk, ++this.loadId, ms)
+      .catch((error: unknown) => console.error(error))
+      .finally(() => {
+        this.following = false;
+      });
+  }
+
   /** Open a month at `at`, or at its start. */
   private async openChunk(
     chunk: CatalogGeoVideoSource,
@@ -423,11 +462,13 @@ export class FieldLayer {
     this.field = field;
     this.tint = month.tint;
     this.chunkIndexValue = chunkIndex;
-    const { times } = field;
-    this.clock.ms = Math.min(
-      Math.max(at ?? times[0], times[0]),
-      times[times.length - 1],
-    );
+    if (this.driving) {
+      const { times } = field;
+      this.clock.ms = Math.min(
+        Math.max(at ?? times[0], times[0]),
+        times[times.length - 1],
+      );
+    }
     // Also on automatic month changes: a month may gain or lose its tint.
     this.host.emit("month", month);
     this.setStatus("");
@@ -582,9 +623,11 @@ export class FieldLayer {
   ): void {
     const gl = this.gl;
     const ms = this.clock.ms;
-    if (moving) {
+    if (moving || (!this.driving && ms !== this.lastMs)) {
+      // A follower redraws its trails when another layer moved the playhead.
       this.settle = this.settleFrames();
     }
+    this.lastMs = ms;
     this.trailFade.setMoving(moving, now);
     this.redistribute(frame);
     if (this.pendingRespawn) {

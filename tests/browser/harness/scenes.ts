@@ -25,6 +25,8 @@ export interface Scene {
   id: string;
   /** What the scene covers. */
   covers: string;
+  /** Layer type and source of the scene layer. */
+  type: "particles" | "scalar";
   layer: string;
   preset: string;
   /** Morph toward a preset, captured after this many frames. */
@@ -35,30 +37,35 @@ export const SCENES: Scene[] = [
   {
     id: "globe-currents",
     covers: "vector particles, orthographic globe, limb and graticule",
+    type: "particles",
     layer: "ocean-current-velocity",
     preset: "globe",
   },
   {
     id: "north-sea-ice",
     covers: "polar azimuthal view, particles converging on the pole",
+    type: "particles",
     layer: "sea-ice-drift",
     preset: "north",
   },
   {
     id: "world-temperature",
     covers: "scalar raster on a world projection (Equal Earth)",
+    type: "scalar",
     layer: "sea-water-temperature",
     preset: "world",
   },
   {
     id: "lambert-currents-temperature",
     covers: "particles tinted by a scalar field, azimuthal equal-area",
+    type: "particles",
     layer: "ocean-velocity-temperature",
     preset: "lambert",
   },
   {
     id: "morph-globe-world",
     covers: "halfway morph globe → Equal Earth, moving trails",
+    type: "particles",
     layer: "ocean-current-velocity",
     preset: "globe",
     // TRANSITION_MS (2200) / 2 at 60 Hz.

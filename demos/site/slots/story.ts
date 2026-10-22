@@ -1,5 +1,5 @@
 import {
-  Projversor,
+  LegacyProjversor as Projversor,
   ProjversorStoryView,
   parseProjversorView,
   type Inset,

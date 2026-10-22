@@ -19,28 +19,11 @@ function seededRandom(seed: number): () => number {
   };
 }
 
-async function until(test: () => boolean, what: string): Promise<void> {
-  const start = Date.now();
-  while (!test()) {
-    if (Date.now() - start > 60_000) {
-      throw new Error(`Timed out waiting for ${what}`);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-}
-
-function canvas(stage: HTMLElement): HTMLCanvasElement {
-  const c = stage.ownerDocument.createElement("canvas");
-  c.style.cssText = "position: absolute; inset: 0; width: 100%; height: 100%";
-  stage.append(c);
-  return c;
-}
-
 /**
- * Render a scene deterministically: open it paused at `TIME` (the open
- * resolves once the frame at the playhead is decoded), wait for the
- * detailed coastlines, then run a fixed number of frames on a manual clock,
- * each on its own task, and the frames of a morph.
+ * Render a scene deterministically through the public API: open it paused
+ * at `TIME` (`init` resolves once the detailed coastlines are in use, `add`
+ * once the frame at the playhead is decoded), then run a fixed number of
+ * frames on a manual clock, each on its own task, and the frames of a morph.
  */
 async function render(
   scene: Scene,
@@ -49,35 +32,25 @@ async function render(
   Math.random = seededRandom(SEED);
   const clock = new FrameClock(window);
   const { Projversor, TRANSITION_MS } = await import("@under-test");
-  const p = new Projversor(
-    { stage, back: canvas(stage), gl: canvas(stage), front: canvas(stage) },
-    { playing: false },
-  );
-  // The detailed coastlines load after construction, with no public signal:
-  // observe the private overlay so every capture uses them.
-  const overlay = (
-    p as unknown as { overlay: { setLandDetail(f: unknown): void } }
-  ).overlay;
-  const setLandDetail = overlay.setLandDetail.bind(overlay);
-  let detailed = false;
-  overlay.setLandDetail = (feature) => {
-    setLandDetail(feature);
-    detailed = true;
-  };
-  await p.apply(
-    { layer: scene.layer, preset: scene.preset, time: TIME, playing: false },
-    { animate: false },
-  );
-  if (p.time !== TIME) {
-    throw new Error(`Playhead ${p.time} is not the scene time ${TIME}`);
+  const pv = new Projversor(stage, {
+    preset: scene.preset,
+    time: TIME,
+    playing: false,
+  });
+  await pv.init();
+  await pv.add("scene", scene.type, { source: scene.layer });
+  if (pv.time !== TIME) {
+    throw new Error(`Playhead ${pv.time} is not the scene time ${TIME}`);
   }
-  await until(() => detailed, "detailed coastlines");
   for (let i = 0; i < SETTLE_FRAMES; i++) {
     clock.frame();
     await nextTask();
   }
   if (scene.morph) {
-    p.goTo({ preset: scene.morph.preset, durationMs: TRANSITION_MS });
+    await pv.update({
+      preset: scene.morph.preset,
+      durationMs: TRANSITION_MS,
+    });
     for (let i = 0; i < scene.morph.frames; i++) {
       clock.frame();
       await nextTask();

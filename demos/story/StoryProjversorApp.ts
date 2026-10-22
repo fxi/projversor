@@ -1,6 +1,6 @@
 import {
   PROJECTIONS,
-  Projversor,
+  LegacyProjversor as Projversor,
   ProjversorStoryView,
   legendLabels,
   monthLegend,
