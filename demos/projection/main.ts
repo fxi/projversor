@@ -1,7 +1,10 @@
+import { mergeStyles, styleForKind } from "@fxi/zartigl/catalog";
+import type { LayerStyleInput } from "@fxi/zartigl/catalog";
+import { colorGradeToGrade, type ColorGrade } from "@fxi/zartigl/engine";
 import {
   PRESETS,
   PROJVERSOR_LAYERS,
-  LegacyProjversor as Projversor,
+  Projversor,
   SPEEDS,
   TINT_LAYERS,
   chunkLabel,
@@ -10,6 +13,7 @@ import {
   findLayer,
   findPreset,
   formatUnit,
+  isTintEntry,
   layerPalettes,
   legendTicks,
   linearTicks,
@@ -18,10 +22,12 @@ import {
   rampGradient,
   rampPosition,
   timeTicks,
+  type FieldLayerConfig,
+  type FieldLayerHandle,
   type ProjversorLayer,
   type ProjversorMonth,
+  type ShareState,
 } from "../../src";
-import { styleForKind } from "@fxi/zartigl/catalog";
 import { Compass } from "./Compass";
 import { GradePanel } from "./GradePanel";
 
@@ -30,6 +36,8 @@ const ZOOM_STEP = 1.5;
 const ROTATE_STEP = 15;
 /** How long the Share button confirms the copy. */
 const COPIED_MS = 1500;
+/** Id of the one layer the explorer shows. */
+const FIELD = "field";
 
 function refs(root: HTMLElement) {
   const get = <T extends Element>(name: string): T => {
@@ -41,9 +49,6 @@ function refs(root: HTMLElement) {
   };
   return {
     stage: get<HTMLElement>("stage"),
-    back: get<HTMLCanvasElement>("back"),
-    gl: get<HTMLCanvasElement>("gl"),
-    front: get<HTMLCanvasElement>("front"),
     provider: get<HTMLElement>("provider"),
     projectionName: get<HTMLElement>("projectionName"),
     status: get<HTMLElement>("status"),
@@ -76,12 +81,18 @@ function refs(root: HTMLElement) {
   };
 }
 
+const layerType = (layer: ProjversorLayer) =>
+  layer.kind === "vector" ? "particles" : "scalar";
+
 /** The projversor controls: rail, pickers, timeline, legend and share. */
 class ProjectionDemo {
   private readonly ui: ReturnType<typeof refs>;
   private readonly projversor: Projversor;
+  private readonly shared: Partial<ShareState>;
   private readonly compass: Compass;
   private readonly gradePanel: GradePanel;
+  /** The shown layer, once opened. */
+  private field: FieldLayerHandle | null = null;
   /** Timeline thumb held: playback waits for its release. */
   private scrubbing = false;
   private copiedTimer = 0;
@@ -94,42 +105,93 @@ class ProjectionDemo {
       const kind = (findLayer(shared.layer) ?? PROJVERSOR_LAYERS[0]).kind;
       shared.style = styleForKind(shared.style, kind);
     }
-    const { stage, back, gl, front } = this.ui;
-    const projversor = new Projversor({ stage, back, gl, front }, shared);
-    this.projversor = projversor;
-    this.compass = new Compass(this.ui.compass, this.ui.needle, {
-      onBearing: (deg) => projversor.setBearing(deg),
-      onToggle: () => projversor.toggleNorth(),
+    this.shared = shared;
+    this.projversor = new Projversor(this.ui.stage, {
+      preset: shared.preset,
+      rotate: shared.rotate,
+      zoom: shared.zoom,
+      time: shared.time,
+      playing: shared.playing ?? true,
     });
-    this.compass.locked = projversor.northLocked;
+    this.compass = new Compass(this.ui.compass, this.ui.needle, {
+      onBearing: (deg) => this.projversor.view.setBearing(deg),
+      onToggle: () => this.projversor.view.toggleNorth(),
+    });
     this.gradePanel = new GradePanel(
       this.ui.gradeToggle,
       this.ui.gradePanel,
-      (grade) => projversor.setGrade(grade),
+      (grade) => this.setGrade(grade),
     );
-    this.gradePanel.value = projversor.grade;
-    this.buildPickers(projversor.preset.id);
+  }
+
+  /** Create the renderer and open the shared state. Rejects without WebGL2. */
+  async start(): Promise<void> {
+    const p = this.projversor;
+    await p.init();
+    this.compass.locked = p.view.northLocked;
+    this.buildPickers(p.view.preset.id);
     this.bindRenderer();
     this.bindControls();
-    this.setPlaying(projversor.playing);
-    projversor.attachInteraction();
-    projversor.apply(shared, { animate: false }).catch((error: unknown) => {
-      this.fail(error);
+    this.setPlaying(p.playing);
+    const shared = this.shared;
+    const layer = findLayer(shared.layer) ?? PROJVERSOR_LAYERS[0];
+    const hasView =
+      shared.preset !== undefined ||
+      shared.rotate !== undefined ||
+      shared.zoom !== undefined;
+    await this.open(layer, {
+      // "" is "no tint"; an unknown id falls back to the layer's own.
+      tint:
+        shared.tint === ""
+          ? null
+          : isTintEntry(shared.tint)
+            ? shared.tint
+            : undefined,
+      style: shared.style,
+      speed: shared.speed,
+      frame: !hasView,
     });
+    this.gradePanel.value = this.field!.grade;
+  }
+
+  /** Show `layer` in place of the shown one, once its month is decoded. */
+  private async open(
+    layer: ProjversorLayer,
+    options: Omit<FieldLayerConfig, "source"> = {},
+  ): Promise<void> {
+    this.field = await this.projversor.replace(FIELD, layerType(layer), {
+      source: layer.id,
+      ...options,
+    });
+    this.syncLayer(this.field);
+  }
+
+  /** Merge into the shown layer's style override. */
+  private restyle(style: LayerStyleInput): void {
+    const field = this.field;
+    if (field) {
+      void field.update(mergeStyles(field.style, style));
+    }
+  }
+
+  private setGrade(grade: ColorGrade): void {
+    this.restyle({ particles: { grade: colorGradeToGrade(grade) } });
   }
 
   private bindRenderer(): void {
     const p = this.projversor;
-    p.on("status", (text) => this.setStatus(text));
-    p.on("layer", (layer) => this.syncLayer(layer));
-    p.on("month", (month) => {
-      this.ui.month.value = String(p.chunkIndex);
-      this.buildDays(p.times);
+    p.on("status", ({ text }) => this.setStatus(text));
+    p.on("month", ({ month }) => {
+      const field = this.field;
+      if (field) {
+        this.ui.month.value = String(field.chunkIndex);
+        this.buildDays(field.times);
+      }
       this.buildLegend(month);
     });
-    p.on("palette", (id) => {
-      this.ui.palette.value = id;
-      this.ui.ramp.style.background = rampGradient(id);
+    p.on("palette", ({ palette }) => {
+      this.ui.palette.value = palette;
+      this.ui.ramp.style.background = rampGradient(palette);
     });
     p.on("playing", (playing) => this.setPlaying(playing));
     p.on("preset", (preset) => {
@@ -138,15 +200,17 @@ class ProjectionDemo {
     });
     p.on("north", (locked) => (this.compass.locked = locked));
     p.on("frame", () => {
-      this.compass.bearing = p.bearing;
-      if (!this.scrubbing) {
-        this.setTimeline(p.progress);
-      }
-      const times = p.times;
+      this.compass.bearing = p.view.bearing;
+      const times = this.field?.times ?? [];
       if (times.length < 2) {
         return;
       }
-      const stepMs = (times[times.length - 1] - times[0]) / (times.length - 1);
+      const first = times[0];
+      const last = times[times.length - 1];
+      if (!this.scrubbing) {
+        this.setTimeline((p.time - first) / (last - first));
+      }
+      const stepMs = (last - first) / (times.length - 1);
       const { date, hour } = playheadLabel(p.time, stepMs);
       this.ui.date.textContent = date;
       this.ui.hour.textContent = hour;
@@ -155,11 +219,11 @@ class ProjectionDemo {
   }
 
   /** Month, layer, tint, speed and palette pickers for the open layer. */
-  private syncLayer(layer: ProjversorLayer): void {
-    const p = this.projversor;
+  private syncLayer(field: FieldLayerHandle): void {
+    const layer = field.source;
     const { month, tint, tintField, speed, palette } = this.ui;
     month.replaceChildren(
-      ...p.chunks.map(
+      ...field.chunks.map(
         (chunk, i) =>
           new Option(
             chunkLabel(chunk.temporal?.start, chunk.temporal?.end),
@@ -167,21 +231,22 @@ class ProjectionDemo {
           ),
       ),
     );
-    month.value = String(p.chunkIndex);
+    month.value = String(field.chunkIndex);
     this.ui.provider.textContent = providerLabel(
-      p.chunks[0]?.provenance?.provider,
+      field.chunks[0]?.provenance?.provider,
     );
     this.ui.layer.value = layer.id;
     tintField.hidden = layer.kind !== "vector";
     this.gradePanel.available = layer.kind === "vector";
-    tint.value = p.tintId ?? "";
+    tint.value = field.tint ?? "";
     speed.replaceChildren(
       ...SPEEDS[layer.kind].map((s) => new Option(`${s}×`, String(s))),
     );
-    speed.value = String(p.speed);
+    speed.value = String(field.speed);
     palette.replaceChildren(
       ...layerPalettes(layer).map((pal) => new Option(pal.label, pal.id)),
     );
+    palette.value = field.palette;
   }
 
   private buildPickers(activePreset: string): void {
@@ -208,39 +273,46 @@ class ProjectionDemo {
       task.catch((error: unknown) => this.fail(error));
     projection.addEventListener("change", () => {
       if (findPreset(projection.value)) {
-        p.goTo({ preset: projection.value });
+        p.view.goTo({ preset: projection.value });
       }
     });
     layer.addEventListener("change", () => {
       const next = findLayer(layer.value);
       if (next) {
-        void run(p.open(next));
+        void run(this.open(next, { frame: true }));
       }
     });
     tint.addEventListener("change", () => {
-      void run(
-        p.open(p.layer, {
-          at: p.time,
-          tint: tint.value || null,
-          frame: false,
-        }),
-      );
+      const field = this.field;
+      if (field) {
+        void run(this.open(field.source, { tint: tint.value || null }));
+      }
     });
     month.addEventListener("change", () => {
-      void run(p.openMonth(Number(month.value)));
+      if (this.field) {
+        void run(this.field.openMonth(Number(month.value)));
+      }
     });
-    speed.addEventListener("change", () => p.setSpeed(Number(speed.value)));
-    palette.addEventListener("change", () => p.setPalette(palette.value));
+    speed.addEventListener("change", () => {
+      void run(p.update({ speed: Number(speed.value) }));
+    });
+    palette.addEventListener("change", () =>
+      this.restyle({ palette: palette.value }),
+    );
 
-    this.ui.play.addEventListener("click", () => p.setPlaying(!p.playing));
+    this.ui.play.addEventListener("click", () => {
+      void p.update({ playing: !p.playing });
+    });
     this.ui.share.addEventListener("click", () => this.share());
-    this.ui.zoomIn.addEventListener("click", () => p.zoomBy(ZOOM_STEP));
-    this.ui.zoomOut.addEventListener("click", () => p.zoomBy(1 / ZOOM_STEP));
+    this.ui.zoomIn.addEventListener("click", () => p.view.zoomBy(ZOOM_STEP));
+    this.ui.zoomOut.addEventListener("click", () =>
+      p.view.zoomBy(1 / ZOOM_STEP),
+    );
     this.ui.rotateLeft.addEventListener("click", () =>
-      p.rotateBy(-ROTATE_STEP),
+      p.view.rotateBy(-ROTATE_STEP),
     );
     this.ui.rotateRight.addEventListener("click", () =>
-      p.rotateBy(ROTATE_STEP),
+      p.view.rotateBy(ROTATE_STEP),
     );
 
     // The thumb drives the playhead like a jog wheel: playback holds while
@@ -248,7 +320,7 @@ class ProjectionDemo {
     const time = this.ui.time;
     const hold = (held: boolean) => {
       this.scrubbing = held;
-      p.setHeld(held);
+      void p.update({ held });
     };
     time.addEventListener("pointerdown", (event) => {
       time.setPointerCapture(event.pointerId);
@@ -259,18 +331,18 @@ class ProjectionDemo {
       time.addEventListener(type, () => hold(false));
     }
     time.addEventListener("input", () => {
-      const times = p.times;
+      const times = this.field?.times ?? [];
       if (times.length < 2) {
         return;
       }
       const span = times[times.length - 1] - times[0];
-      p.scrub(times[0] + Number(time.value) * span);
+      void run(p.update({ time: times[0] + Number(time.value) * span }));
       time.style.setProperty("--p", time.value);
     });
     window.addEventListener("keydown", (event) => {
       if (event.code === "Space" && event.target === document.body) {
         event.preventDefault();
-        p.setPlaying(!p.playing);
+        void p.update({ playing: !p.playing });
       }
     });
   }
@@ -286,10 +358,29 @@ class ProjectionDemo {
     this.setStatus(String(error));
   }
 
+  /** Everything needed to reproduce the displayed view. */
+  private state(field: FieldLayerHandle): ShareState {
+    const p = this.projversor;
+    return {
+      layer: field.source.id,
+      time: p.time,
+      preset: p.view.preset.id,
+      rotate: [...p.view.rotate],
+      zoom: p.view.zoom,
+      playing: p.playing,
+      speed: field.speed,
+      tint: field.tint ?? "",
+      style: styleForKind(field.style, field.source.kind),
+    };
+  }
+
   /** Copy a link to the displayed view. */
   private share(): void {
+    if (!this.field) {
+      return;
+    }
     const url = new URL(location.href);
-    url.hash = encodeShare(this.projversor.getState());
+    url.hash = encodeShare(this.state(this.field));
     // navigator.clipboard is missing outside secure contexts.
     Promise.resolve()
       .then(() => navigator.clipboard.writeText(url.href))
@@ -390,10 +481,13 @@ function providerLabel(provider: string | undefined): string {
 
 const root = document.getElementById("app");
 if (root) {
-  try {
-    new ProjectionDemo(root);
-  } catch (error) {
+  const fail = (error: unknown) => {
     console.error(error);
     root.querySelector('[data-ref="status"]')!.textContent = String(error);
+  };
+  try {
+    new ProjectionDemo(root).start().catch(fail);
+  } catch (error) {
+    fail(error);
   }
 }

@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { parseProjversorView, projversorState } from "./storyView";
+import type { Projversor } from "./Projversor";
+import {
+  ProjversorStoryView,
+  parseProjversorView,
+  projversorState,
+} from "./storyView";
 
 const view = (config: Record<string, unknown>) => ({
   id: "probe",
@@ -159,5 +164,92 @@ describe("projversorState", () => {
   it("sets an empty style without an override, so the next view resets", () => {
     const state = projversorState(parseProjversorView(view({})));
     expect(state.style).toEqual({});
+  });
+});
+
+/** A projversor double recording the calls a story view makes. */
+function fakeProjversor() {
+  const calls: unknown[][] = [];
+  let field: { source: { id: string }; tint: string | null } | undefined;
+  const handle = (source: string, tint: string | null) => ({
+    source: { id: source },
+    tint,
+    update: async (style: unknown) => {
+      calls.push(["restyle", style]);
+    },
+  });
+  const pv = {
+    remove: async (id: string) => {
+      calls.push(["remove", id]);
+    },
+    add: async (id: string, type: string) => {
+      calls.push(["add", id, type]);
+    },
+    update: async (state: unknown) => {
+      calls.push(["update", state]);
+    },
+    get: () => field,
+    replace: async (
+      id: string,
+      type: string,
+      config: { source: string; tint: string | null },
+    ) => {
+      calls.push(["replace", id, type, config]);
+      field = handle(config.source, config.tint);
+      return field;
+    },
+  };
+  return { pv: pv as unknown as Projversor, calls };
+}
+
+describe("ProjversorStoryView", () => {
+  const scene = (id: string, config: Record<string, unknown>) => ({
+    id,
+    type: "projversor",
+    config: { preset: "globe", ...config },
+  });
+
+  it("opens a layer, then only restyles and seeks while it stays", async () => {
+    const { pv, calls } = fakeProjversor();
+    const story = new ProjversorStoryView(pv, false);
+    await story.activate(scene("a", { layer: "surface-wind" }));
+    expect(calls.find((c) => c[0] === "replace")).toEqual([
+      "replace",
+      "story-field",
+      "particles",
+      {
+        source: "surface-wind",
+        tint: null,
+        style: {},
+        time: undefined,
+        speed: undefined,
+      },
+    ]);
+    calls.length = 0;
+    await story.activate(
+      scene("b", {
+        layer: "surface-wind",
+        style: { palette: "viridis" },
+        playback: { time: "2025-01-15T00:00:00Z" },
+      }),
+    );
+    expect(calls.some((c) => c[0] === "replace")).toBe(false);
+    expect(calls).toContainEqual(["restyle", { palette: "viridis" }]);
+    expect(calls).toContainEqual([
+      "update",
+      { speed: undefined, time: Date.parse("2025-01-15T00:00:00Z") },
+    ]);
+  });
+
+  it("shows a view's GeoJSON and clears it with the next view", async () => {
+    const { pv, calls } = fakeProjversor();
+    const story = new ProjversorStoryView(pv, false);
+    const geojson = { data: { type: "Point", coordinates: [0, 0] } };
+    await story.activate(scene("a", { layer: "surface-wind", geojson }));
+    expect(calls).toContainEqual(["add", "story-geojson", "geojson"]);
+    calls.length = 0;
+    await story.activate(scene("b", { layer: "surface-wind" }));
+    expect(calls).toContainEqual(["remove", "story-geojson"]);
+    expect(calls.some((c) => c[0] === "add")).toBe(false);
   });
 });

@@ -3,7 +3,7 @@ import {
   parseLayerStyle,
   type LayerStyleInput,
 } from "@fxi/zartigl/catalog";
-import { colorGradeToGrade, type ColorGrade } from "@fxi/zartigl/engine";
+import { colorGradeToGrade } from "@fxi/zartigl/engine";
 
 /** Everything needed to reproduce the displayed view. */
 export interface ShareState {
@@ -22,14 +22,6 @@ export interface ShareState {
   tint: string;
   /** Style override over the layer's own: palette, particles, raster. */
   style?: LayerStyleInput;
-}
-
-/** Flat fields of the first format, moved to `style`. */
-export interface LegacyShareState {
-  /** @deprecated Use `style.palette`. */
-  palette?: string;
-  /** @deprecated Use `style.particles.grade`. */
-  grade?: ColorGrade;
 }
 
 const round = (value: number) => Number(value.toFixed(3));

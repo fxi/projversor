@@ -2,6 +2,16 @@ import { defineConfig } from "@playwright/test";
 
 export const HARNESS_PORT = 5180;
 
+/** The demos, each on its own Vite dev server. */
+export const DEMOS = {
+  projection: { port: 5181, path: "/projversor/" },
+  story: { port: 5182, path: "/projversor/story/" },
+  site: { port: 5183, path: "/" },
+} as const;
+
+export const demoUrl = (name: keyof typeof DEMOS) =>
+  `http://localhost:${DEMOS[name].port}${DEMOS[name].path}`;
+
 export default defineConfig({
   testDir: ".",
   outputDir: "test-results",
@@ -30,11 +40,19 @@ export default defineConfig({
       args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
     },
   },
-  webServer: {
-    command: `npx vite --config tests/browser/vite.config.ts --port ${HARNESS_PORT} --strictPort`,
-    cwd: "../..",
-    url: `http://localhost:${HARNESS_PORT}/`,
-    // A running server may serve another entry under test.
-    reuseExistingServer: false,
-  },
+  webServer: [
+    {
+      command: `npx vite --config tests/browser/vite.config.ts --port ${HARNESS_PORT} --strictPort`,
+      cwd: "../..",
+      url: `http://localhost:${HARNESS_PORT}/`,
+      // A running server may serve another entry under test.
+      reuseExistingServer: false,
+    },
+    ...(Object.keys(DEMOS) as (keyof typeof DEMOS)[]).map((name) => ({
+      command: `npx vite --config vite.config.${name}.ts --port ${DEMOS[name].port} --strictPort`,
+      cwd: "../..",
+      url: demoUrl(name),
+      reuseExistingServer: false,
+    })),
+  ],
 });

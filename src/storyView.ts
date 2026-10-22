@@ -1,13 +1,10 @@
 import { parseLayerStyle, type LayerStyleInput } from "@fxi/zartigl/catalog";
-import { findLayer, layerPalettes } from "./layers";
+import { SPEEDS } from "./Clock";
+import { STYLE_SUPPORT } from "./FieldLayer";
 import { parseGeoJSONLayer, type GeoJSONLayer } from "./geojson";
+import { findLayer, isTintEntry, layerPalettes, preloadLayer } from "./layers";
 import { findPreset } from "./presets";
-import {
-  SPEEDS,
-  STYLE_SUPPORT,
-  isTintEntry,
-  type LegacyProjversor,
-} from "./LegacyProjversor";
+import type { FieldLayerHandle, Projversor } from "./Projversor";
 import type { ShareState } from "./share";
 
 /**
@@ -253,8 +250,9 @@ export function projversorState(
   };
 }
 
-/** Id of the GeoJSON layer a story view shows. */
-const VIEW_GEOJSON = "story-view";
+/** Ids of the layers a story view shows: its field and its GeoJSON. */
+const VIEW_FIELD = "story-field";
+const VIEW_GEOJSON = "story-geojson";
 
 /**
  * Story view on one persistent projversor: each scene morphs the view from
@@ -267,19 +265,57 @@ export class ProjversorStoryView {
    * @param onError Reports a failed time seek.
    */
   constructor(
-    private readonly projversor: LegacyProjversor,
+    private readonly projversor: Projversor,
     private readonly animate = true,
     private readonly onError: (error: unknown) => void = console.error,
   ) {}
 
   async activate(view: ProjversorViewDefinition): Promise<void> {
     const config = parseProjversorView(view);
+    const pv = this.projversor;
     // A view without GeoJSON clears the previous one.
-    this.projversor.setGeoJSON(VIEW_GEOJSON, config.geojson ?? null);
-    await this.projversor.apply(projversorState(config), {
+    await pv.remove(VIEW_GEOJSON);
+    if (config.geojson) {
+      await pv.add(VIEW_GEOJSON, "geojson", config.geojson);
+    }
+    const state = projversorState(config);
+    await pv.update({
+      preset: state.preset,
+      rotate: state.rotate,
+      zoom: state.zoom,
       animate: this.animate,
       durationMs: config.transitionMs,
     });
+    const layer = findLayer(config.layer)!;
+    // "" is "no tint"; omitted, the layer's own.
+    const tint =
+      layer.kind === "vector"
+        ? config.tint === ""
+          ? null
+          : (config.tint ?? layer.tint ?? null)
+        : null;
+    const field = pv.get(VIEW_FIELD) as FieldLayerHandle | undefined;
+    if (field && field.source.id === layer.id && field.tint === tint) {
+      await field.update(state.style);
+      await pv.update({ speed: state.speed, time: state.time });
+      return;
+    }
+    await pv.replace(
+      VIEW_FIELD,
+      layer.kind === "vector" ? "particles" : "scalar",
+      {
+        source: layer.id,
+        tint,
+        style: state.style,
+        time: state.time,
+        speed: state.speed,
+      },
+    );
+  }
+
+  /** The field layer of the shown view, once a view opened. */
+  get field(): FieldLayerHandle | undefined {
+    return this.projversor.get(VIEW_FIELD) as FieldLayerHandle | undefined;
   }
 
   /** Warm the cache for a view shown next. */
@@ -287,19 +323,19 @@ export class ProjversorStoryView {
     const { layer, playback } = parseProjversorView(view);
     const at =
       playback?.time === undefined ? undefined : Date.parse(playback.time);
-    return this.projversor.preload(layer, at);
+    return preloadLayer(layer, at);
   }
 
   play(): void {
-    this.projversor.setPlaying(true);
+    void this.projversor.update({ playing: true });
   }
 
   pause(): void {
-    this.projversor.setPlaying(false);
+    void this.projversor.update({ playing: false });
   }
 
   setTime(time: number): void {
-    this.projversor.seek(time).catch(this.onError);
+    this.projversor.update({ time }).catch(this.onError);
   }
 
   destroy(): void {

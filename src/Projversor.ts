@@ -2,8 +2,8 @@ import type {
   CatalogGeoVideoSource,
   LayerStyleInput,
 } from "@fxi/zartigl/catalog";
-import { gradeToColorGrade } from "@fxi/zartigl/engine";
-import type { Camera, Rotate } from "./Camera";
+import { gradeToColorGrade, type ColorGrade } from "@fxi/zartigl/engine";
+import { clampZoom, type Camera, type Rotate } from "./Camera";
 import { Emitter } from "./emitter";
 import {
   FieldLayer,
@@ -25,7 +25,7 @@ import {
   type ImageSource,
 } from "./SphereImage";
 import { Stage, type StageEvents, type StageInitial } from "./Stage";
-import type { Inset } from "./view";
+import { regionView, type Inset } from "./view";
 
 /** Field layer types and the catalog kind of their source. */
 const SOURCE_KIND = { particles: "vector", scalar: "scalar" } as const;
@@ -67,6 +67,12 @@ export interface FieldLayerConfig {
   tint?: string | null;
   /** Style over the source's own: palette, particles, raster. */
   style?: LayerStyleInput;
+  /** Open the month holding this time, epoch ms. Default: the playhead. */
+  time?: number;
+  /** Playback speed multiplier for the source's kind (see SPEEDS). */
+  speed?: number;
+  /** Ease the view onto a regional source once it shows. */
+  frame?: boolean;
 }
 
 export interface ProjversorOptions extends StageInitial {
@@ -92,6 +98,8 @@ export interface ProjversorState {
   playing?: boolean;
   /** Playback speed multiplier, one of SPEEDS for the clock layer's kind. */
   speed?: number;
+  /** Hold playback, e.g. while a timeline thumb is held. */
+  held?: boolean;
   /** Ocean, land and line colors; omitted ones stay. */
   colors?: Partial<OverlayColors>;
 }
@@ -131,9 +139,13 @@ export type ProjversorView = Pick<
 export class FieldLayerHandle {
   constructor(
     readonly id: string,
-    readonly type: FieldLayerType,
     private readonly field: FieldLayer,
   ) {}
+
+  /** Particles for a vector source, scalar otherwise; follows {@link Projversor.replace}. */
+  get type(): FieldLayerType {
+    return this.field.layer.kind === "vector" ? "particles" : "scalar";
+  }
 
   /** The source layer: label, kind, catalog entry. */
   get source(): ProjversorLayer {
@@ -166,6 +178,26 @@ export class FieldLayerHandle {
   /** True for the layer whose months drive the playhead. */
   get driving(): boolean {
     return this.field.driving;
+  }
+
+  /** The style override over the source's own. */
+  get style(): LayerStyleInput {
+    return this.field.viewStyle;
+  }
+
+  /** Particle color grade of the resolved style. */
+  get grade(): ColorGrade {
+    return this.field.grade;
+  }
+
+  /** Playback speed multiplier of the source's kind. */
+  get speed(): number {
+    return this.field.speed;
+  }
+
+  /** Open month `index` of {@link chunks} at its start. */
+  openMonth(index: number): Promise<void> {
+    return this.field.openMonth(index);
   }
 
   /** Replace the style override over the source's own (`{}` clears it). */
@@ -253,14 +285,9 @@ export type ProjversorLayerHandle =
   | GeoJSONLayerHandle;
 
 type Entry =
-  | {
-      type: FieldLayerType;
-      field: FieldLayer;
-      image: null;
-      handle: FieldLayerHandle;
-    }
-  | { type: "image"; field: null; image: ImageState; handle: ImageLayerHandle }
-  | { type: "geojson"; field: null; image: null; handle: GeoJSONLayerHandle };
+  | { field: FieldLayer; image: null; handle: FieldLayerHandle }
+  | { field: null; image: ImageState; handle: ImageLayerHandle }
+  | { field: null; image: null; handle: GeoJSONLayerHandle };
 
 /**
  * Catalog layers on a sphere that morphs between world projections, for
@@ -312,14 +339,17 @@ export class Projversor {
     if (doc.defaultView?.getComputedStyle(root).position === "static") {
       root.style.position = "relative";
     }
-    const canvas = () => {
+    // First in the root, under its other content; data-projversor names
+    // each canvas for styling.
+    const canvas = (name: string) => {
       const c = doc.createElement("canvas");
+      c.dataset.projversor = name;
       c.style.cssText =
         "position: absolute; inset: 0; width: 100%; height: 100%";
-      root.append(c);
       return c;
     };
-    const [back, gl, front] = [canvas(), canvas(), canvas()];
+    const [back, gl, front] = ["back", "gl", "front"].map(canvas);
+    root.prepend(back, gl, front);
     this.canvases = [back, gl, front];
     const stage = new Stage(
       { stage: root, back, gl, front },
@@ -397,7 +427,7 @@ export class Projversor {
       const handle = new GeoJSONLayerHandle(id, layer, (shown) =>
         stage.setGeoJSON(id, shown),
       );
-      this.layers.set(id, { type, field: null, image: null, handle });
+      this.layers.set(id, { field: null, image: null, handle });
       stage.setGeoJSON(id, layer);
       return handle;
     }
@@ -412,26 +442,11 @@ export class Projversor {
       }
       const state = { sphere: new SphereImage(stage.gl, source, box), opacity };
       const handle = new ImageLayerHandle(id, state);
-      this.layers.set(id, { type, field: null, image: state, handle });
+      this.layers.set(id, { field: null, image: state, handle });
       return handle;
     }
-    if (!(type in SOURCE_KIND)) {
-      throw new Error(`projversor: unknown layer type "${type}"`);
-    }
-    const { source, tint, style } = config as FieldLayerConfig;
-    const layer = findLayer(source);
-    if (!layer) {
-      throw new Error(`projversor: unknown source "${source}"`);
-    }
-    if (layer.kind !== SOURCE_KIND[type]) {
-      throw new Error(
-        `projversor: "${source}" is a ${layer.kind} source, not ${type}`,
-      );
-    }
-    if (type === "particles" && this.has("particles")) {
-      throw new Error("projversor: one particles layer at a time");
-    }
-    checkStyle(style, layer);
+    const fieldConfig = config as FieldLayerConfig;
+    const layer = this.fieldSource(id, type, fieldConfig);
     const field = new FieldLayer(
       stage.gl,
       stage.clock,
@@ -440,23 +455,96 @@ export class Projversor {
       {
         emit: (event, detail) => this.relay(id, event, detail),
       },
-      gradeToColorGrade(style?.particles?.grade),
+      gradeToColorGrade(fieldConfig.style?.particles?.grade),
     );
     field.driving = !this.driver();
-    const handle = new FieldLayerHandle(id, type, field);
-    this.layers.set(id, { type, field, image: null, handle });
+    const handle = new FieldLayerHandle(id, field);
+    this.layers.set(id, { field, image: null, handle });
     try {
-      await field.open(layer, {
-        at: this.timeSet ? stage.clock.ms : undefined,
-        tint,
-        style,
-      });
+      await this.openField(field, layer, fieldConfig);
     } catch (error) {
       this.drop(id);
       throw error;
     }
-    this.timeSet = true;
     return handle;
+  }
+
+  /**
+   * Add a particles or scalar layer, or switch the one added as `id` to
+   * another source, tint or style in place: it keeps showing until the new
+   * month is decoded, then switches in one frame. A later call supersedes
+   * one still loading. A failed switch keeps the shown layer.
+   */
+  async replace(
+    id: string,
+    type: FieldLayerType,
+    config: FieldLayerConfig,
+  ): Promise<FieldLayerHandle> {
+    const entry = this.layers.get(id);
+    if (!entry) {
+      return this.add(id, type, config);
+    }
+    if (!entry.field) {
+      throw new Error(
+        `projversor: layer "${id}" is not a particles or scalar layer`,
+      );
+    }
+    const layer = this.fieldSource(id, type, config);
+    await this.openField(entry.field, layer, config);
+    return entry.handle as FieldLayerHandle;
+  }
+
+  /** The source of a field layer, checked against its type and the others. */
+  private fieldSource(
+    id: string,
+    type: FieldLayerType,
+    config: FieldLayerConfig,
+  ): ProjversorLayer {
+    if (!(type in SOURCE_KIND)) {
+      throw new Error(`projversor: unknown layer type "${type}"`);
+    }
+    const layer = findLayer(config.source);
+    if (!layer) {
+      throw new Error(`projversor: unknown source "${config.source}"`);
+    }
+    if (layer.kind !== SOURCE_KIND[type]) {
+      throw new Error(
+        `projversor: "${config.source}" is a ${layer.kind} source, not ${type}`,
+      );
+    }
+    const particles = [...this.layers].some(
+      ([other, e]) => other !== id && e.handle.type === "particles",
+    );
+    if (type === "particles" && particles) {
+      throw new Error("projversor: one particles layer at a time");
+    }
+    checkStyle(config.style, layer);
+    return layer;
+  }
+
+  /** Open a source on a field layer, then frame it when asked. */
+  private async openField(
+    field: FieldLayer,
+    layer: ProjversorLayer,
+    config: FieldLayerConfig,
+  ): Promise<void> {
+    const stage = this.requireStage();
+    const shown = await field.open(layer, {
+      at: config.time ?? (this.timeSet ? stage.clock.ms : undefined),
+      tint: config.tint,
+      style: config.style,
+      speed: config.speed,
+    });
+    if (!shown) {
+      return;
+    }
+    this.timeSet = true;
+    const bounds = field.bounds;
+    const region =
+      config.frame && bounds ? regionView(bounds, stage.camera.view) : null;
+    if (region) {
+      stage.camera.easeTo(region.rotate, clampZoom(region.zoom));
+    }
   }
 
   /** The layer added as `id`. */
@@ -496,10 +584,6 @@ export class Projversor {
         void next.seek(this.requireStage().clock.ms);
       }
     }
-  }
-
-  private has(type: ProjversorLayerType): boolean {
-    return [...this.layers.values()].some((e) => e.type === type);
   }
 
   /** The catalog layers, bottom first. */
@@ -571,6 +655,9 @@ export class Projversor {
     }
     if (state.playing !== undefined) {
       stage.clock.setPlaying(state.playing);
+    }
+    if (state.held !== undefined) {
+      stage.clock.held = state.held;
     }
     const driver = this.driver();
     if (state.speed !== undefined && driver) {

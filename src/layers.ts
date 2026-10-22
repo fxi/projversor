@@ -1,5 +1,6 @@
 import {
   catalog,
+  sourceCoversTime,
   requireCatalogEntry,
   resolveLocalizedText,
   type CatalogEntry,
@@ -7,6 +8,7 @@ import {
 } from "@fxi/zartigl/catalog";
 import {
   geoVideoChunkSources,
+  loadGeoVideoManifest,
   getPalettes,
   isGeoVideoArchiveSource,
   loadGeoVideoIndex,
@@ -178,4 +180,29 @@ export async function loadTintChunks(
     console.error(error);
     return [];
   }
+}
+
+/**
+ * Warm the HTTP cache with a layer's archive index and the manifest of the
+ * month holding `at`, else the latest, so opening it later starts sooner.
+ */
+export async function preloadLayer(source: string, at?: number): Promise<void> {
+  const layer = findLayer(source);
+  if (!layer) {
+    return;
+  }
+  const chunks = await loadChunks(layer.entryId);
+  const chunk =
+    (at === undefined
+      ? undefined
+      : chunks.find((c) => sourceCoversTime(c, { time: at }))) ??
+    chunks[chunks.length - 1];
+  if (chunk) {
+    await loadGeoVideoManifest(chunk.manifestUrl);
+  }
+}
+
+/** Whether `id` is the catalog entry of a scalar layer that can tint particles. */
+export function isTintEntry(id: string | undefined): id is string {
+  return TINT_LAYERS.some((l) => l.entryId === id);
 }

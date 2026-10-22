@@ -101,8 +101,8 @@ body {
   height: 100%;
 }
 
-.layer-back,
-.layer-gl {
+[data-projversor="back"],
+[data-projversor="gl"] {
   pointer-events: none;
 }
 

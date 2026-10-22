@@ -6,15 +6,13 @@ the projection, camera and data of the previous one. A pager
 and the data playback, and the story loops.
 
 ```bash
-npm run dev:story-projversor     # vite dev server: index.html and sheet.html
-npm run build:story-projversor   # dist-story-projversor/, served under /zartigl/projversor/story/
+npm run dev:story     # vite dev server: index.html and sheet.html
+npm run build:demos   # dist-story/, served under /projversor/story/
 ```
 
-The projversor Docker image serves it at `/story/`.
-
-The app uses zartigl only through its package entries: `@fxi/zartigl/projversor`
-(here `../projversor`) for the renderer, `@fxi/zartigl/story` (`../story`) for the
-story runtime, the `<story-pager>` element and the scene timer.
+The app uses the `Projversor` API (`../../src`) for the renderer and
+`@fxi/zartigl/story` for the story runtime, the `<story-pager>` element and
+the scene timer.
 
 ## Layout system
 
@@ -33,7 +31,7 @@ A scene's `layout` is an intent, resolved per viewport by `layout.ts`:
   side to the clear map side. Its angle and stops are css custom properties
   registered with `@property`, so layouts crossfade.
 - **The map moves out of the way.** The renderer centers and fits the sphere
-  in a free zone (`Projversor.setInset`), computed from the measured text box
+  in a free zone (`projversor.view.setInset`), computed from the measured text box
   (`mapInset`) and eased with the scene morph. Map `zoom` is relative to that
   zone, so values above 1 bleed under the veil.
 - **Per aspect ratio.** In portrait, side and corner layouts fold to top or
@@ -42,12 +40,12 @@ A scene's `layout` is an intent, resolved per viewport by `layout.ts`:
   shrinks step by step to 60%, then the text compacts.
 - **Rail.** The free edge carries, top to bottom, a north badge, the view
   center and projection, and the color scale (min, palette, max, unit). North
-  is the true screen direction at the map center (`Projversor.northAngle`),
+  is the true screen direction at the map center (`projversor.view.northAngle`),
   so it holds on tilted projections; near a pole it fades out. The scale
   shows what the colors mean: a raster or tint over its domain, else the
   particle speed (`monthLegend`). A thin shade keeps the rail readable.
 - **Wrap.** With `wrap: true` on a view, side layouts shape the paragraph to
-  the globe limb (`shape-outside` from `Projversor.outline()`).
+  the globe limb (`shape-outside` from `projversor.view.outline()`).
 
 `layout.test.ts` checks every layout on phone, tablet, desktop and landscape
 phone: the text zone stays on screen, never overlaps the map's free zone, and
@@ -66,10 +64,11 @@ leaves the map at least 40% of the screen.
   or a tuned grade; `raster`
   opacity, vibrance; see "Layer style" in the root README), `playback`
   (`speed`, one of `SPEEDS`; `time`, ISO date, else the latest month),
-  `transitionMs` and `wrap`. Each view starts from the layer's own style.
+  `transitionMs`, `wrap` and `geojson` (regions drawn above the field
+  during the view). Each view starts from the layer's own style.
   The flat `palette`, `vibrant`, `speed` and `time` of the first format still
   load, with a deprecation warning. `parseProjversorView`
-  (`@fxi/zartigl/projversor`) validates it.
+  (`../../src`) validates it.
 
 ## Tools
 

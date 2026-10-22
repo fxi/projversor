@@ -23,20 +23,10 @@ export type {
 } from "./Projversor";
 export type { GeoJSONStyle } from "./geojson";
 export type { OverlayColors } from "./Overlay";
-export {
-  LegacyProjversor,
-  SPEEDS,
-  TRANSITION_MS,
-  VIEW_MS,
-  clampZoom,
-  isTintEntry,
-} from "./LegacyProjversor";
-export type {
-  LegacyProjversorEvents,
-  ProjversorCanvases,
-  ProjversorMonth,
-  ProjversorViewTarget,
-} from "./LegacyProjversor";
+export { TRANSITION_MS, VIEW_MS, clampZoom } from "./Camera";
+export type { ProjversorViewTarget } from "./Camera";
+export { SPEEDS } from "./Clock";
+export type { ProjversorMonth } from "./FieldLayer";
 export { PRESETS, findPreset } from "./presets";
 export type { Preset } from "./presets";
 export { PROJECTIONS } from "./projections";
@@ -47,11 +37,13 @@ export {
   PROJVERSOR_LAYERS,
   TINT_LAYERS,
   findLayer,
+  isTintEntry,
   layerPalettes,
+  preloadLayer,
 } from "./layers";
 export type { ProjversorLayer } from "./layers";
 export { decodeShare, encodeShare } from "./share";
-export type { LegacyShareState, ShareState } from "./share";
+export type { ShareState } from "./share";
 export {
   chunkLabel,
   formatUnit,

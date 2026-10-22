@@ -95,9 +95,11 @@ vi.mock("./SphereScalar", () => ({
 }));
 
 const { Projversor } = await import("./Projversor");
+const { loadChunks } = await import("./layers");
 
 const WIND = "72aa3549-8cdf-4275-b8f7-5b32ca40a3f2";
 const SST = "3db0120b-17d2-4789-9952-efcc0953ecc4";
+const CURRENTS = "61a81ddd-6c8e-4020-a59f-06ef13a90419";
 
 /** Month manifest of an entry, two daily frames in January or February. */
 function resolveMonth(entryId: string, month: "jan" | "feb"): void {
@@ -118,6 +120,7 @@ function fakeRoot() {
         width: 0,
         height: 0,
         style: { cssText: "" },
+        dataset: {},
         getContext: () => gl,
         addEventListener: vi.fn(),
         remove: vi.fn(),
@@ -131,7 +134,7 @@ function fakeRoot() {
     clientHeight: 600,
     ownerDocument: doc,
     style: {},
-    append: (canvas: { remove: () => void }) => canvases.push(canvas),
+    prepend: (...added: { remove: () => void }[]) => canvases.push(...added),
   };
   return { root: root as unknown as HTMLElement, canvases };
 }
@@ -298,5 +301,52 @@ describe("Projversor", () => {
     await expect(
       pv.update({ colors: { sea: "#000" } as never }),
     ).rejects.toThrow("projversor colors.sea is not one of");
+  });
+
+  it("replaces a layer in place once the new source is decoded", async () => {
+    const pv = new Projversor(fakeRoot().root, { interactive: false });
+    await pv.init();
+    const field = await added(pv, "field", "particles", "surface-wind", WIND);
+    const replacing = pv.replace("field", "particles", {
+      source: "ocean-current-velocity",
+    });
+    await flush();
+    // Index loaded, month still decoding: the shown layer stays.
+    expect(field.source.id).toBe("surface-wind");
+    resolveMonth(CURRENTS, "feb");
+    expect(await replacing).toBe(field);
+    expect(field.source.id).toBe("ocean-current-velocity");
+    expect(pv.ids).toEqual(["field"]);
+  });
+
+  it("lets a later replace win over one still loading, across kinds", async () => {
+    const pv = new Projversor(fakeRoot().root, { interactive: false });
+    await pv.init();
+    const field = await added(pv, "field", "particles", "surface-wind", WIND);
+    const stale = pv.replace("field", "particles", {
+      source: "ocean-current-velocity",
+    });
+    await flush();
+    const winner = pv.replace("field", "scalar", {
+      source: "sea-water-temperature",
+    });
+    await flush();
+    resolveMonth(SST, "feb");
+    await winner;
+    resolveMonth(CURRENTS, "feb");
+    await stale;
+    expect(field.source.id).toBe("sea-water-temperature");
+    expect(field.type).toBe("scalar");
+  });
+
+  it("keeps the shown layer when a replace fails", async () => {
+    const pv = new Projversor(fakeRoot().root, { interactive: false });
+    await pv.init();
+    const field = await added(pv, "field", "particles", "surface-wind", WIND);
+    vi.mocked(loadChunks).mockResolvedValueOnce([]);
+    await expect(
+      pv.replace("field", "particles", { source: "ocean-current-velocity" }),
+    ).rejects.toThrow("has no archive months");
+    expect(field.source.id).toBe("surface-wind");
   });
 });

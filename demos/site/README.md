@@ -9,9 +9,8 @@ npm run dev:site     # http://localhost:5173/
 npm run build:site   # dist-site/: index.html, assets/, content/
 ```
 
-Like the other projversor apps, it reaches zartigl only through the package
-entries (`../projversor`, `../story`); in its own repository these become
-`@fxi/zartigl/projversor` and `@fxi/zartigl/story`.
+Like the other demos, it uses the `Projversor` API (`../../src`) and
+reaches zartigl only through its package entries (`@fxi/zartigl/story`).
 
 ## Content
 

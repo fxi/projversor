@@ -5,34 +5,20 @@ regional (Mediterranean), on a sphere that morphs between world projections.
 Vector archives (currents, wind, waves, sea ice) play as animated particles,
 scalar ones (temperature, salinity, biogeochemistry, …) as a raster.
 
-The renderer lives in `src/projversor/` and is published as
-`@fxi/zartigl/projversor`: the `Projversor` class owns the canvases, the GL
-context, archive loading and the view, and reports changes through events.
-This demo is its controls (rail, pickers, timeline, legend, compass, share);
-`../demo-story-projversor` is a story on the same renderer. Both use zartigl only
-through its package entries (`../engine`, `../catalog`, `../projversor`,
-`../story`); ESLint rejects deeper imports so they can move to their own
-repository.
+It is the explorer of the `Projversor` API (`../../src`, see the
+repository README): one layer, replaced in place from the pickers, and its
+controls (rail, pickers, timeline, legend, compass, share). `../story` is a
+story on the same renderer. zartigl is reached through its package entries
+only (`@fxi/zartigl/engine`, `/catalog`, `/story`).
 
 ```bash
-npm run dev:projection     # vite dev server
-npm run build:projection   # dist-projection/, served under /zartigl/projversor/
-```
-
-## Container
-
-The repository `Dockerfile` builds this demo and serves it at `/` with nginx
-on port 8080, with the projversor story at `/story/`. Images are published to `ghcr.io/fxi/zartigl-projversor`
-(`latest` from `main`, semver tags from releases).
-
-```bash
-docker compose up -d --build   # build locally, open http://localhost:8080
-docker compose pull && docker compose up -d   # use the published image
+npm run dev:projection   # vite dev server
+npm run build:demos      # dist-projection/, dist-story/, dist-site/
 ```
 
 ## Technique
 
-File names below are in `src/projversor/` unless noted.
+File names below are in `src/` unless noted.
 
 - **Twin projections.** Each projection exists twice, as a d3 raw formula
   (`projections.ts`) and in GLSL (`shaders/project.glsl`). The canvas overlay

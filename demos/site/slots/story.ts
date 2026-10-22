@@ -1,5 +1,5 @@
 import {
-  LegacyProjversor as Projversor,
+  Projversor,
   ProjversorStoryView,
   parseProjversorView,
   type Inset,
@@ -269,9 +269,6 @@ export async function mountStory(
   root.setAttribute("aria-label", options.t.text(story.title));
   const stage = doc.createElement("div");
   stage.className = "zs-stage";
-  const [back, gl, front] = ["back", "gl", "front"].map(() =>
-    doc.createElement("canvas"),
-  );
   const veil = doc.createElement("div");
   veil.className = "zs-veil";
   const status = doc.createElement("p");
@@ -299,15 +296,18 @@ export async function mountStory(
     options.t,
     reduced ? "auto" : "smooth",
   );
-  stage.append(back, gl, front, veil, rail, status);
+  stage.append(veil, rail, status);
   root.append(stage, steps);
 
   // Attached first: the overlay reads its colors from the computed style.
-  // Throws without WebGL2: the caller then shows the fallback slot.
+  // Rejects without WebGL2: the caller then shows the fallback slot.
   host.append(root);
-  let projversor: Projversor;
+  const projversor = new Projversor(stage, {
+    playing: false,
+    interactive: false,
+  });
   try {
-    projversor = new Projversor({ stage, back, gl, front });
+    await projversor.init();
   } catch (error) {
     root.remove();
     throw error;
@@ -334,7 +334,10 @@ export async function mountStory(
   const inset = (durationMs: number) => {
     const scene = story.scenes[Math.max(0, active)];
     const { width, height } = stage.getBoundingClientRect();
-    projversor.setInset(sceneInset(scene.layout, width, height), durationMs);
+    projversor.view.setInset(
+      sceneInset(scene.layout, width, height),
+      durationMs,
+    );
   };
 
   const activate = async (index: number) => {
@@ -368,6 +371,8 @@ export async function mountStory(
         return;
       }
       loading.hide();
+      // The scene whose view shows: a hook for styles and tests.
+      root.dataset.shown = scene.id;
       const next = story.scenes[index + 1];
       const nextView = next && viewOf(next);
       if (nextView) {
@@ -383,7 +388,7 @@ export async function mountStory(
   // Play only while the story is on screen and the tab visible.
   let onScreen = false;
   const syncPlaying = () =>
-    projversor.setPlaying(onScreen && !doc.hidden && !reduced);
+    void projversor.update({ playing: onScreen && !doc.hidden && !reduced });
   const visibility = new IntersectionObserver(([entry]) => {
     onScreen = entry.isIntersecting;
     syncPlaying();

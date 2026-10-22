@@ -1,6 +1,6 @@
 import {
   PROJECTIONS,
-  LegacyProjversor as Projversor,
+  Projversor,
   ProjversorStoryView,
   legendLabels,
   monthLegend,
@@ -68,9 +68,6 @@ function refs(root: HTMLElement) {
   };
   return {
     stage: get<HTMLElement>("stage"),
-    back: get<HTMLCanvasElement>("back"),
-    gl: get<HTMLCanvasElement>("gl"),
-    front: get<HTMLCanvasElement>("front"),
     brand: get<HTMLElement>("brand"),
     counter: get<HTMLElement>("counter"),
     edge: get<HTMLElement>("edge"),
@@ -161,6 +158,8 @@ export class StoryProjversorApp {
   private viewKey = "";
   private viewChanged = 0;
   private wrappedKey = "";
+  /** Source of the shown field, to redraw credits and timeline on change. */
+  private sourceId = "";
 
   constructor(private readonly root: HTMLElement) {
     this.ui = refs(root);
@@ -170,8 +169,7 @@ export class StoryProjversorApp {
     this.locale = selectLocale(story, this.params.get("lang"));
     this.labels = storyUiLabels(this.locale);
     this.viewById = new Map(views.views.map((view) => [view.id, view]));
-    const { stage, back, gl, front } = this.ui;
-    this.projversor = new Projversor({ stage, back, gl, front });
+    this.projversor = new Projversor(this.ui.stage, { playing: false });
     this.loading = new LoadingIndicator((visible) =>
       root.classList.toggle("is-loading", visible),
     );
@@ -196,7 +194,9 @@ export class StoryProjversorApp {
     this.ui.debug.hidden = !this.params.has("debug");
   }
 
-  start(): void {
+  /** Create the renderer, then show the first scene. Rejects without WebGL2. */
+  async start(): Promise<void> {
+    await this.projversor.init();
     const registry = this.root.ownerDocument.defaultView?.customElements;
     defineStoryPager(registry);
     defineTimeline(registry);
@@ -211,8 +211,7 @@ export class StoryProjversorApp {
       step: (i) => labels.step(i, this.text(scenes[i].name)),
     });
     this.ui.pager.playing = this.playing;
-    this.projversor.setPlaying(this.playing);
-    this.projversor.attachInteraction();
+    void this.projversor.update({ playing: this.playing });
     this.bindEvents();
     void this.activate(this.index);
   }
@@ -229,7 +228,7 @@ export class StoryProjversorApp {
     );
     timeline.addEventListener("timeline-hold", (event) => {
       const held = (event as CustomEvent<boolean>).detail;
-      p.setHeld(held);
+      void p.update({ held });
       if (held) {
         this.timer.pause();
       } else if (this.playing) {
@@ -239,24 +238,28 @@ export class StoryProjversorApp {
     timeline.addEventListener("timeline-scrub", (event) => {
       const { time, final } = (event as CustomEvent<TimelineScrubDetail>)
         .detail;
-      const times = p.times;
+      const times = this.adapter.field?.times ?? [];
       const inMonth =
         times.length > 1 && time >= times[0] && time <= times[times.length - 1];
-      if (inMonth) {
-        p.scrub(time);
-      } else if (final) {
-        p.seek(time).catch((error: unknown) => this.reportError(error));
+      // Within the month at once; another month only on release.
+      if (inMonth || final) {
+        p.update({ time }).catch((error: unknown) => this.reportError(error));
       }
     });
-    p.on("status", (text) => this.setStatus(text));
+    p.on("status", ({ text }) => this.setStatus(text));
     p.on("preset", () => this.renderCredits());
-    p.on("layer", () => {
-      this.renderCredits();
-      this.renderTimeline();
+    p.on("month", ({ month }) => {
+      // A new source: its credits and its months on the timeline.
+      const source = this.adapter.field?.source.id ?? "";
+      if (source !== this.sourceId) {
+        this.sourceId = source;
+        this.renderCredits();
+        this.renderTimeline();
+      }
+      this.renderLegend(month);
     });
-    p.on("month", (month) => this.renderLegend(month));
-    p.on("palette", (id) =>
-      this.ui.legendRamp.style.setProperty("--ramp", rampGradient(id)),
+    p.on("palette", ({ palette }) =>
+      this.ui.legendRamp.style.setProperty("--ramp", rampGradient(palette)),
     );
     p.on("frame", () => this.onFrame());
     this.ui.north.setAttribute("aria-label", this.labels.north);
@@ -289,10 +292,10 @@ export class StoryProjversorApp {
     doc.addEventListener("visibilitychange", () => {
       if (doc.hidden) {
         this.timer.pause();
-        p.setPlaying(false);
+        void p.update({ playing: false });
       } else if (this.playing) {
         this.timer.resume();
-        p.setPlaying(true);
+        void p.update({ playing: true });
       }
     });
     // Resizes and text reflows move the free zone, never the scene.
@@ -365,7 +368,7 @@ export class StoryProjversorApp {
   private setPlaying(playing: boolean): void {
     this.playing = playing;
     this.ui.pager.playing = playing;
-    this.projversor.setPlaying(playing);
+    void this.projversor.update({ playing });
     if (playing) {
       this.timer.resume();
     } else {
@@ -424,8 +427,8 @@ export class StoryProjversorApp {
     // bounds the map: the free zone must not chase its own reflow.
     const text = wraps ? zone : this.copyRect(variant);
     const inset = mapInset(variant, viewport, text, metrics);
-    if (!sameInset(inset, this.projversor.inset)) {
-      this.projversor.setInset(inset, this.reduced ? 0 : durationMs);
+    if (!sameInset(inset, this.projversor.view.inset)) {
+      this.projversor.view.setInset(inset, this.reduced ? 0 : durationMs);
     }
     if (resolved.angle === null) {
       style.setProperty("--veil-opacity", "0");
@@ -506,7 +509,7 @@ export class StoryProjversorApp {
     const height = this.textHeight();
     const box = { ...copy, height };
     const side = this.root.dataset.edge === "left" ? "left" : "right";
-    const shape = limbShape(this.projversor.outline(), box, side);
+    const shape = limbShape(this.projversor.view.outline(), box, side);
     const { contour } = this.ui;
     if (shape) {
       contour.style.height = `${height}px`;
@@ -529,7 +532,7 @@ export class StoryProjversorApp {
   // ---- per frame ----------------------------------------------------------
 
   private onFrame(): void {
-    const p = this.projversor;
+    const p = this.projversor.view;
     this.ui.pager.progress = this.timer.progress;
     const key = JSON.stringify([p.rotate, p.zoom, p.inset, p.preset.id]);
     const now = performance.now();
@@ -562,7 +565,7 @@ export class StoryProjversorApp {
   }
 
   private renderEdge(): void {
-    const p = this.projversor;
+    const p = this.projversor.view;
     const north = p.northAngle();
     this.ui.north.classList.toggle("is-pole", north === null);
     if (north !== null) {
@@ -577,22 +580,23 @@ export class StoryProjversorApp {
   }
 
   private renderTime(): void {
-    const p = this.projversor;
-    const times = p.times;
-    if (times.length < 2 || this.ui.timeline.hidden) {
+    const field = this.adapter.field;
+    const times = field?.times ?? [];
+    if (!field || times.length < 2 || this.ui.timeline.hidden) {
       return;
     }
+    const time = this.projversor.time;
     const stepMs = (times[times.length - 1] - times[0]) / (times.length - 1);
-    const { date, hour } = playheadLabel(p.time, stepMs);
+    const { date, hour } = playheadLabel(time, stepMs);
     this.ui.timeline.setTime(
-      p.time,
-      p.chunkIndex,
+      time,
+      field.chunkIndex,
       hour ? `${date} ${hour}` : date,
     );
   }
 
   private renderTimeline(): void {
-    const spans = this.projversor.chunks
+    const spans = (this.adapter.field?.chunks ?? [])
       .map((chunk) => ({
         start: Date.parse(chunk.temporal?.start ?? ""),
         end: Date.parse(chunk.temporal?.end ?? ""),
@@ -703,8 +707,7 @@ export class StoryProjversorApp {
   }
 
   private renderCredits(): void {
-    const p = this.projversor;
-    const provider = p.chunks[0]?.provenance?.provider;
+    const provider = this.adapter.field?.chunks[0]?.provenance?.provider;
     const data =
       provider === "copernicus-marine" ? "Copernicus Marine" : provider;
     this.ui.credits.textContent = [
