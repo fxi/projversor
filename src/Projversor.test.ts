@@ -51,10 +51,16 @@ vi.mock("./GeoVideoField", () => ({
   },
 }));
 
-vi.mock("./Overlay", () => ({
+const overlayColors: unknown[] = [];
+
+vi.mock("./Overlay", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./Overlay")>()),
   Overlay: class {
     readonly geojson = new Map();
     setLandDetail(): void {}
+    setColors(colors: unknown): void {
+      overlayColors.push(colors);
+    }
   },
 }));
 
@@ -281,5 +287,16 @@ describe("Projversor", () => {
     await pv.remove("photo");
     expect(imagesDestroyed).toEqual([[160, -10, 200, 10]]);
     expect(pv.ids).toEqual([]);
+  });
+
+  it("recolors the overlay on update and rejects unknown color keys", async () => {
+    const pv = new Projversor(fakeRoot().root, { interactive: false });
+    await pv.init();
+    overlayColors.length = 0;
+    await pv.update({ colors: { ocean: "#111d23" } });
+    expect(overlayColors).toEqual([{ ocean: "#111d23" }]);
+    await expect(
+      pv.update({ colors: { sea: "#000" } as never }),
+    ).rejects.toThrow("projversor colors.sea is not one of");
   });
 });

@@ -32,7 +32,7 @@
   --zs-gutter: clamp(16px, 4vw, 56px);
   --zs-ease: cubic-bezier(0.16, 1, 0.3, 1);
   --zs-sans: "Inter Tight Variable", "Inter Tight", system-ui, sans-serif;
-  /* Read by the projversor overlay: black sea and land, grey lines. */
+  /* Read by the projversor overlay: tinted sea, dark land, grey lines. */
   --ocean: #111d23;
   --land: #111;
   --coast: rgba(170, 170, 170, 0.55);

@@ -22,6 +22,7 @@ export type {
   ProjversorView,
 } from "./Projversor";
 export type { GeoJSONStyle } from "./geojson";
+export type { OverlayColors } from "./Overlay";
 export {
   LegacyProjversor,
   SPEEDS,

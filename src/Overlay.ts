@@ -16,7 +16,7 @@ export interface OverlayLayers {
   landDetail?: GeoPermissibleObjects;
 }
 
-/** Overlay colors, read from the matching css custom properties. */
+/** Overlay colors; defaults from the matching css custom properties. */
 const COLOR_TOKENS = [
   "ocean",
   "land",
@@ -25,6 +25,30 @@ const COLOR_TOKENS = [
   "graticule",
   "equator",
 ] as const;
+
+/** Css colors of the sphere backdrop and the lines. */
+export type OverlayColors = Record<(typeof COLOR_TOKENS)[number], string>;
+
+/** Check overlay colors from untyped input; throws with `path`. */
+export function parseOverlayColors(
+  value: unknown,
+  path: string,
+): Partial<OverlayColors> {
+  if (typeof value !== "object" || value === null) {
+    throw new Error(`${path} must be an object`);
+  }
+  for (const [key, color] of Object.entries(value)) {
+    if (!(COLOR_TOKENS as readonly string[]).includes(key)) {
+      throw new Error(
+        `${path}.${key} is not one of ${COLOR_TOKENS.join(", ")}`,
+      );
+    }
+    if (typeof color !== "string") {
+      throw new Error(`${path}.${key} must be a css color string`);
+    }
+  }
+  return value as Partial<OverlayColors>;
+}
 
 const SPHERE: GeoPermissibleObjects = { type: "Sphere" };
 const GRATICULE = geoGraticule10();
@@ -51,12 +75,13 @@ export class Overlay {
   private readonly front: CanvasRenderingContext2D;
   /** GeoJSON layers drawn above everything, in insertion order. */
   readonly geojson = new Map<string, GeoJSONLayer>();
-  private readonly colors: Record<(typeof COLOR_TOKENS)[number], string>;
+  private readonly colors: OverlayColors;
 
   constructor(
     backCanvas: HTMLCanvasElement,
     frontCanvas: HTMLCanvasElement,
     private readonly layers: OverlayLayers,
+    colors: Partial<OverlayColors> = {},
   ) {
     this.back = backCanvas.getContext("2d")!;
     this.front = frontCanvas.getContext("2d")!;
@@ -66,7 +91,8 @@ export class Overlay {
         token,
         style.getPropertyValue(`--${token}`).trim(),
       ]),
-    ) as Record<(typeof COLOR_TOKENS)[number], string>;
+    ) as OverlayColors;
+    this.setColors(colors);
     this.mutate = geoProjectionMutator(() => {
       const blend = this.blend;
       if (!blend) {
@@ -78,6 +104,16 @@ export class Overlay {
       return raw;
     });
     this.projection = this.mutate();
+  }
+
+  /** Override colors, drawn from the next redraw; others stay. */
+  setColors(colors: Partial<OverlayColors>): void {
+    for (const token of COLOR_TOKENS) {
+      const color = colors[token];
+      if (color !== undefined) {
+        this.colors[token] = color;
+      }
+    }
   }
 
   /** Finer land, once loaded: drawn from the next resting frame. */

@@ -33,9 +33,9 @@
   --ink: #f2f1ee;
   --muted: #8b8f9c;
   --line: rgba(255, 255, 255, 0.16);
-  /* Read by the projversor overlay. */
-  --ocean: #000;
-  --land: #000;
+  /* Read by the projversor overlay: tinted sea, dark land, grey lines. */
+  --ocean: #111d23;
+  --land: #111;
   --coast: rgba(150, 150, 150, 0.5);
   --outline: rgba(255, 255, 255, 0.14);
   --graticule: rgba(255, 255, 255, 0.06);

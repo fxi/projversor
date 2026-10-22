@@ -5,7 +5,7 @@ import { Camera, type Rotate } from "./Camera";
 import { Clock } from "./Clock";
 import type { Emitter } from "./emitter";
 import type { GeoJSONLayer } from "./geojson";
-import { Overlay } from "./Overlay";
+import { Overlay, type OverlayColors } from "./Overlay";
 import type { Preset } from "./presets";
 import { SphereParticles } from "./SphereParticles";
 import { SphereScalar } from "./SphereScalar";
@@ -37,6 +37,8 @@ export interface StageInitial {
   rotate?: Rotate;
   zoom?: number;
   playing?: boolean;
+  /** Colors over the css custom properties of the canvas. */
+  colors?: Partial<OverlayColors>;
 }
 
 /** What the frame loop runs for the layers, in order. */
@@ -92,9 +94,12 @@ export class Stage {
     this.gl = gl;
     this.particles = new SphereParticles(gl);
     this.raster = new SphereScalar(gl);
-    this.overlay = new Overlay(canvases.back, canvases.front, {
-      land: landFeature(land110),
-    });
+    this.overlay = new Overlay(
+      canvases.back,
+      canvases.front,
+      { land: landFeature(land110) },
+      initial.colors,
+    );
     // The finer coastline is ten times heavier: load it after first paint.
     this.landDetail = import("world-atlas/land-50m.json")
       .then(({ default: land50 }) => {
@@ -127,6 +132,12 @@ export class Stage {
   start(hooks: StageHooks): void {
     this.hooks = hooks;
     this.frameId = requestAnimationFrame((now) => this.tick(now));
+  }
+
+  /** Override overlay colors and redraw on the next frame. */
+  setColors(colors: Partial<OverlayColors>): void {
+    this.overlay.setColors(colors);
+    this.overlayKey = "";
   }
 
   /** Show a GeoJSON layer above everything, or remove it (null). */

@@ -17,6 +17,7 @@ import {
   type GeoJSONStyle,
 } from "./geojson";
 import { findLayer, type ProjversorLayer } from "./layers";
+import { parseOverlayColors, type OverlayColors } from "./Overlay";
 import {
   SphereImage,
   loadImage,
@@ -91,6 +92,8 @@ export interface ProjversorState {
   playing?: boolean;
   /** Playback speed multiplier, one of SPEEDS for the clock layer's kind. */
   speed?: number;
+  /** Ocean, land and line colors; omitted ones stay. */
+  colors?: Partial<OverlayColors>;
 }
 
 /** Events and their payloads. */
@@ -300,6 +303,9 @@ export class Projversor {
     }
     if (this.stage) {
       return;
+    }
+    if (this.options.colors !== undefined) {
+      parseOverlayColors(this.options.colors, "projversor colors");
     }
     const root = this.root;
     const doc = root.ownerDocument;
@@ -559,6 +565,9 @@ export class Projversor {
       } else {
         stage.camera.jumpTo(target);
       }
+    }
+    if (state.colors !== undefined) {
+      stage.setColors(parseOverlayColors(state.colors, "projversor colors"));
     }
     if (state.playing !== undefined) {
       stage.clock.setPlaying(state.playing);
