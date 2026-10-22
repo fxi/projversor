@@ -50,3 +50,16 @@ test("site mounts its story slot", async ({ page }) => {
   await expect(story.locator(".zs-status")).toHaveText("");
   expect(errors).toEqual([]);
 });
+
+test("minimal demo shows its field and regions", async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto(demoUrl("minimal"));
+  await expect(page.locator('[data-projversor="gl"]')).toHaveCount(1);
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-ready",
+    "true",
+    LOAD,
+  );
+  await expect(page.locator("#status")).toHaveText("");
+  expect(errors).toEqual([]);
+});

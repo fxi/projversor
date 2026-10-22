@@ -7,6 +7,7 @@ export const DEMOS = {
   projection: { port: 5181, path: "/projversor/" },
   story: { port: 5182, path: "/projversor/story/" },
   site: { port: 5183, path: "/" },
+  minimal: { port: 5184, path: "/projversor/minimal/" },
 } as const;
 
 export const demoUrl = (name: keyof typeof DEMOS) =>

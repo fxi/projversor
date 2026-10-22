@@ -19,9 +19,10 @@
     "dev:projection": "vite --config vite.config.projection.ts",
     "dev:story": "vite --config vite.config.story.ts",
     "dev:site": "vite --config vite.config.site.ts",
-    "build:demos": "vite build --config vite.config.projection.ts && vite build --config vite.config.story.ts && vite build --config vite.config.site.ts",
+    "build:demos": "vite build --config vite.config.projection.ts && vite build --config vite.config.story.ts && vite build --config vite.config.site.ts && vite build --config vite.config.minimal.ts",
     "format": "prettier --write \"**/*.{js,mjs,ts}\"",
-    "format:check": "prettier --check \"**/*.{js,mjs,ts}\""
+    "format:check": "prettier --check \"**/*.{js,mjs,ts}\"",
+    "dev:minimal": "vite --config vite.config.minimal.ts"
   },
   "dependencies": {
     "@fxi/zartigl": "file:../zartigl",

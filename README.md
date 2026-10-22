@@ -69,8 +69,10 @@ npm run build:zartigl
 npm test                # unit tests
 npm run typecheck
 npm run test:browser    # reference renders and demo smoke tests
-npm run dev:projection  # also dev:story, dev:site
+npm run dev:minimal     # also dev:projection, dev:story, dev:site
 ```
 
-Demos: `demos/projection` (explorer), `demos/story` (a story) and
-`demos/site` (home page with a scroll story).
+Demos: `demos/minimal` (sea surface temperature anomaly and the Niño
+regions, the smallest page), `demos/projection` (explorer), `demos/story` (a
+story) and `demos/site` (home page with a scroll story). `npm run dev:minimal` and the
+like serve each one; `npm run build:demos` builds them all.

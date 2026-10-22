@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>projversor · minimal</title>
+    <link rel="icon" href="data:," />
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #04050b;
+        color: #e9ebf2;
+        font: 14px system-ui, sans-serif;
+      }
+      #map {
+        position: fixed;
+        inset: 0;
+        /* Overlay colors, read by projversor at init(). */
+        --ocean: #111d23;
+        --land: #111;
+        --coast: rgba(170, 170, 170, 0.55);
+        --outline: rgba(255, 255, 255, 0.18);
+        --graticule: rgba(255, 255, 255, 0.1);
+        --equator: rgba(255, 196, 92, 0.45);
+      }
+      #status {
+        position: fixed;
+        left: 16px;
+        bottom: 12px;
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <p id="status" role="status"></p>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
