@@ -1,0 +1,22 @@
+# The context is the folder holding projversor and zartigl: only these two,
+# without their installs, builds and local data.
+*
+!projversor
+!zartigl
+**/.git
+**/.github
+**/.claude
+**/.playwright-mcp
+**/.env
+**/.env.*
+**/.DS_Store
+**/node_modules
+**/dist
+**/dist-*
+**/test-results
+**/playwright-report
+**/_tmp
+zartigl/artifacts
+zartigl/paper
+zartigl/scripts/.venv
+**/__pycache__

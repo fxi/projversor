@@ -76,3 +76,19 @@ Demos: `demos/minimal` (sea surface temperature anomaly and the Niño
 regions, the smallest page), `demos/projection` (explorer), `demos/story` (a
 story) and `demos/site` (home page with a scroll story). `npm run dev:minimal` and the
 like serve each one; `npm run build:demos` builds them all.
+
+## Docker
+
+The image serves the demos with nginx on port 8080: the explorer at `/`,
+the story at `/story/`, the site at `/site/` and the minimal page at
+`/minimal/` (`/healthz` for health checks). It is built from the folder
+holding both projversor and zartigl, as in MapX `submodules/`:
+
+```bash
+docker compose up -d --build   # from this folder; open http://localhost:8080
+docker compose pull && docker compose up -d   # the published image
+```
+
+CI publishes `ghcr.io/fxi/projversor` from `main` (`latest`) and from `v*`
+tags, building zartigl from its `main` branch, or from the `ZARTIGL_REF`
+repository variable.
