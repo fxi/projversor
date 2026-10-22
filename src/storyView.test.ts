@@ -29,6 +29,17 @@ describe("parseProjversorView", () => {
     );
   });
 
+  it("accepts GeoJSON regions and rejects malformed ones with their path", () => {
+    const geojson = {
+      data: { type: "Point", coordinates: [0, 0] },
+      style: { label: "name" },
+    };
+    expect(parseProjversorView(view({ geojson })).geojson).toEqual(geojson);
+    expect(() =>
+      parseProjversorView(view({ geojson: { data: { type: "Nope" } } })),
+    ).toThrow("views.probe.config.geojson.data must be a GeoJSON object");
+  });
+
   it("rejects malformed numbers, dates and tints", () => {
     expect(() => parseProjversorView(view({ rotate: [0, 0] }))).toThrow(
       /rotate/,

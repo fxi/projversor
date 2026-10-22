@@ -6,6 +6,7 @@ import {
   type GeoProjection,
   type GeoRawProjection,
 } from "d3";
+import { drawGeoJSON, type GeoJSONLayer } from "./geojson";
 import { blendRaw, invertBlend, type Blend } from "./projections";
 import { viewArea, type ViewFrame } from "./view";
 
@@ -50,6 +51,8 @@ export class Overlay {
   private readonly front: CanvasRenderingContext2D;
   /** Opaque land; off when the field also covers the continents. */
   fillLand = true;
+  /** GeoJSON layers drawn above everything, in insertion order. */
+  readonly geojson = new Map<string, GeoJSONLayer>();
   private readonly colors: Record<(typeof COLOR_TOKENS)[number], string>;
 
   constructor(
@@ -147,5 +150,9 @@ export class Overlay {
     ctx.lineWidth = 1;
     ctx.strokeStyle = this.colors.outline;
     ctx.stroke();
+
+    for (const layer of this.geojson.values()) {
+      drawGeoJSON(ctx, this.projection, frame, layer);
+    }
   }
 }

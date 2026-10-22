@@ -54,6 +54,7 @@ vi.mock("./GeoVideoField", () => ({
 vi.mock("./Overlay", () => ({
   Overlay: class {
     fillLand = true;
+    readonly geojson = new Map();
     setLandDetail(): void {}
   },
 }));
@@ -222,5 +223,21 @@ describe("Projversor", () => {
       id: "wind",
       palette: "viridis",
     });
+  });
+
+  it("adds, restyles and removes a GeoJSON layer, and rejects other data", async () => {
+    const pv = new Projversor(fakeRoot().root, { interactive: false });
+    await pv.init();
+    const data = { type: "Point" as const, coordinates: [0, 0] };
+    const zones = await pv.add("zones", "geojson", { data });
+    expect(zones.type).toBe("geojson");
+    expect(pv.ids).toEqual(["zones"]);
+    await zones.update({ label: "name" });
+    expect(zones.style).toEqual({ label: "name" });
+    await expect(
+      pv.add("bad", "geojson", { data: { type: "Map" } as never }),
+    ).rejects.toThrow("must be a GeoJSON object");
+    await pv.remove("zones");
+    expect(pv.ids).toEqual([]);
   });
 });

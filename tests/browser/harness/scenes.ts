@@ -1,3 +1,10 @@
+import type { GeoJSONLayerConfig } from "../../../src";
+import storyViews from "../../../demos/story/views.json" with { type: "json" };
+
+/** The Niño regions of the story El Niño scene, as published. */
+const NINO = storyViews.views.find((v) => v.id === "pacific-anomaly")!.config
+  .geojson as unknown as GeoJSONLayerConfig;
+
 /**
  * Reference scenes: catalog layers paused at a fixed time, with a seeded
  * `Math.random`. Shared by the harness page and the Playwright spec.
@@ -29,6 +36,10 @@ export interface Scene {
   type: "particles" | "scalar";
   layer: string;
   preset: string;
+  rotate?: [number, number, number];
+  zoom?: number;
+  /** GeoJSON drawn above the field. */
+  geojson?: GeoJSONLayerConfig;
   /** Morph toward a preset, captured after this many frames. */
   morph?: { preset: string; frames: number };
 }
@@ -70,5 +81,16 @@ export const SCENES: Scene[] = [
     preset: "globe",
     // TRANSITION_MS (2200) / 2 at 60 Hz.
     morph: { preset: "world", frames: 66 },
+  },
+  {
+    id: "pacific-nino",
+    covers:
+      "GeoJSON regions with labels above a raster, across the antimeridian",
+    type: "scalar",
+    layer: "sea-water-temperature",
+    preset: "plate",
+    rotate: [160, 0, 0],
+    zoom: 1.6,
+    geojson: NINO,
   },
 ];

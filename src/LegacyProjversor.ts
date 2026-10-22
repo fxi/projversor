@@ -21,6 +21,7 @@ import type { Camera } from "./Camera";
 import type { Clock } from "./Clock";
 import { Emitter } from "./emitter";
 import { FieldLayer, checkStyle, type FieldLayerEvents } from "./FieldLayer";
+import type { GeoJSONLayer } from "./geojson";
 import {
   PROJVERSOR_LAYERS,
   TINT_LAYERS,
@@ -445,6 +446,14 @@ export class LegacyProjversor {
 
   outline(): [number, number][] {
     return this.camera.outline();
+  }
+
+  /**
+   * Show a GeoJSON layer above everything, or remove it (null). A bridge
+   * for the story views until they use {@link Projversor}.
+   */
+  setGeoJSON(id: string, layer: GeoJSONLayer | null): void {
+    this.stage.setGeoJSON(id, layer);
   }
 
   /**

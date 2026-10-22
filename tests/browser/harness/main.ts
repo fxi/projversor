@@ -34,11 +34,16 @@ async function render(
   const { Projversor, TRANSITION_MS } = await import("@under-test");
   const pv = new Projversor(stage, {
     preset: scene.preset,
+    rotate: scene.rotate,
+    zoom: scene.zoom,
     time: TIME,
     playing: false,
   });
   await pv.init();
   await pv.add("scene", scene.type, { source: scene.layer });
+  if (scene.geojson) {
+    await pv.add("regions", "geojson", scene.geojson);
+  }
   if (pv.time !== TIME) {
     throw new Error(`Playhead ${pv.time} is not the scene time ${TIME}`);
   }

@@ -1,5 +1,6 @@
 import { parseLayerStyle, type LayerStyleInput } from "@fxi/zartigl/catalog";
 import { findLayer, layerPalettes } from "./layers";
+import { parseGeoJSONLayer, type GeoJSONLayer } from "./geojson";
 import { findPreset } from "./presets";
 import {
   SPEEDS,
@@ -50,6 +51,8 @@ export interface ProjversorViewConfig {
   transitionMs?: number;
   /** Side layouts: the paragraph follows the globe limb. */
   wrap?: boolean;
+  /** GeoJSON drawn above the field during this view, e.g. named regions. */
+  geojson?: GeoJSONLayer;
 }
 
 const KEYS = new Set([
@@ -62,6 +65,7 @@ const KEYS = new Set([
   "playback",
   "transitionMs",
   "wrap",
+  "geojson",
 ]);
 
 /** Flat keys of the first view format, and where they moved. */
@@ -223,6 +227,9 @@ export function parseProjversorView(
       `${path}.wrap must be a boolean`,
     );
   }
+  if (config.geojson !== undefined) {
+    parseGeoJSONLayer(config.geojson, `${path}.geojson`);
+  }
   return config as unknown as ProjversorViewConfig;
 }
 
@@ -246,6 +253,9 @@ export function projversorState(
   };
 }
 
+/** Id of the GeoJSON layer a story view shows. */
+const VIEW_GEOJSON = "story-view";
+
 /**
  * Story view on one persistent projversor: each scene morphs the view from
  * the previous one, and the layer reopens only when it changes.
@@ -264,6 +274,8 @@ export class ProjversorStoryView {
 
   async activate(view: ProjversorViewDefinition): Promise<void> {
     const config = parseProjversorView(view);
+    // A view without GeoJSON clears the previous one.
+    this.projversor.setGeoJSON(VIEW_GEOJSON, config.geojson ?? null);
     await this.projversor.apply(projversorState(config), {
       animate: this.animate,
       durationMs: config.transitionMs,

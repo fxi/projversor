@@ -11,14 +11,26 @@ import {
   type FieldLayerEvents,
   type ProjversorMonth,
 } from "./FieldLayer";
+import {
+  parseGeoJSONLayer,
+  type GeoJSONLayer,
+  type GeoJSONStyle,
+} from "./geojson";
 import { findLayer, type ProjversorLayer } from "./layers";
 import { Stage, type StageEvents, type StageInitial } from "./Stage";
 import type { Inset } from "./view";
 
-/** Layer types and the catalog kind of their source. */
+/** Field layer types and the catalog kind of their source. */
 const SOURCE_KIND = { particles: "vector", scalar: "scalar" } as const;
 
-export type ProjversorLayerType = keyof typeof SOURCE_KIND;
+export type FieldLayerType = keyof typeof SOURCE_KIND;
+export type ProjversorLayerType = FieldLayerType | "geojson";
+
+/**
+ * A small GeoJSON drawn as lines (and optional fill and labels) above the
+ * fields; `data` in lon/lat degrees.
+ */
+export type GeoJSONLayerConfig = GeoJSONLayer;
 
 /** A GeoVideo layer from the catalog. */
 export interface FieldLayerConfig {
@@ -89,11 +101,11 @@ export type ProjversorView = Pick<
   | "outline"
 >;
 
-/** A layer added to a projversor. */
-export class ProjversorLayerHandle {
+/** A particles or scalar layer added to a projversor. */
+export class FieldLayerHandle {
   constructor(
     readonly id: string,
-    readonly type: ProjversorLayerType,
+    readonly type: FieldLayerType,
     private readonly field: FieldLayer,
   ) {}
 
@@ -142,11 +154,40 @@ export class ProjversorLayerHandle {
   }
 }
 
-interface Entry {
-  type: ProjversorLayerType;
-  field: FieldLayer;
-  handle: ProjversorLayerHandle;
+/** A GeoJSON layer added to a projversor. */
+export class GeoJSONLayerHandle {
+  readonly type = "geojson";
+
+  constructor(
+    readonly id: string,
+    private layer: GeoJSONLayer,
+    private readonly show: (layer: GeoJSONLayer) => void,
+  ) {}
+
+  get data(): GeoJSONLayer["data"] {
+    return this.layer.data;
+  }
+
+  get style(): GeoJSONStyle {
+    return { ...this.layer.style };
+  }
+
+  /** Replace the style; drawn from the next frame. */
+  async update(style: GeoJSONStyle): Promise<void> {
+    const layer = parseGeoJSONLayer(
+      { data: this.layer.data, style },
+      `projversor layer "${this.id}"`,
+    );
+    this.layer = layer;
+    this.show(layer);
+  }
 }
+
+export type ProjversorLayerHandle = FieldLayerHandle | GeoJSONLayerHandle;
+
+type Entry =
+  | { type: FieldLayerType; field: FieldLayer; handle: FieldLayerHandle }
+  | { type: "geojson"; field: null; handle: GeoJSONLayerHandle };
 
 /**
  * Catalog layers on a sphere that morphs between world projections, for
@@ -216,7 +257,7 @@ export class Projversor {
     stage.start({
       advance: (dt) => this.driver()?.advanceTime(dt),
       draw: (frame, now, moving) => {
-        for (const { field } of this.layers.values()) {
+        for (const field of this.fields()) {
           field.follow();
           field.draw(frame, now, moving);
         }
@@ -241,35 +282,56 @@ export class Projversor {
   // ---- layers ------------------------------------------------------------
 
   /**
-   * Add a catalog layer on top of the others; resolves once its first
-   * frame is decoded. Rejects for an unknown source, a source of another
-   * kind than `type`, or a second particles layer.
+   * Add a layer on top of the others. A catalog layer resolves once its
+   * first frame is decoded, and rejects for an unknown source, a source of
+   * another kind than `type`, or a second particles layer. A GeoJSON layer
+   * is drawn above all fields, whatever the order.
    */
   async add(
     id: string,
-    type: ProjversorLayerType,
+    type: "geojson",
+    config: GeoJSONLayerConfig,
+  ): Promise<GeoJSONLayerHandle>;
+  async add(
+    id: string,
+    type: FieldLayerType,
     config: FieldLayerConfig,
+  ): Promise<FieldLayerHandle>;
+  async add(
+    id: string,
+    type: ProjversorLayerType,
+    config: FieldLayerConfig | GeoJSONLayerConfig,
   ): Promise<ProjversorLayerHandle> {
     const stage = this.requireStage();
     if (this.layers.has(id)) {
       throw new Error(`projversor: layer "${id}" already exists`);
     }
+    if (type === "geojson") {
+      const layer = parseGeoJSONLayer(config, `projversor layer "${id}"`);
+      const handle = new GeoJSONLayerHandle(id, layer, (shown) =>
+        stage.setGeoJSON(id, shown),
+      );
+      this.layers.set(id, { type, field: null, handle });
+      stage.setGeoJSON(id, layer);
+      return handle;
+    }
     if (!(type in SOURCE_KIND)) {
       throw new Error(`projversor: unknown layer type "${type}"`);
     }
-    const layer = findLayer(config.source);
+    const { source, tint, style } = config as FieldLayerConfig;
+    const layer = findLayer(source);
     if (!layer) {
-      throw new Error(`projversor: unknown source "${config.source}"`);
+      throw new Error(`projversor: unknown source "${source}"`);
     }
     if (layer.kind !== SOURCE_KIND[type]) {
       throw new Error(
-        `projversor: "${config.source}" is a ${layer.kind} source, not ${type}`,
+        `projversor: "${source}" is a ${layer.kind} source, not ${type}`,
       );
     }
     if (type === "particles" && this.has("particles")) {
       throw new Error("projversor: one particles layer at a time");
     }
-    checkStyle(config.style, layer);
+    checkStyle(style, layer);
     const field = new FieldLayer(
       stage.gl,
       stage.clock,
@@ -279,16 +341,16 @@ export class Projversor {
         emit: (event, detail) => this.relay(id, event, detail),
         shown: () => this.updateLandFill(),
       },
-      gradeToColorGrade(config.style?.particles?.grade),
+      gradeToColorGrade(style?.particles?.grade),
     );
     field.driving = !this.driver();
-    const handle = new ProjversorLayerHandle(id, type, field);
+    const handle = new FieldLayerHandle(id, type, field);
     this.layers.set(id, { type, field, handle });
     try {
       await field.open(layer, {
         at: this.timeSet ? stage.clock.ms : undefined,
-        tint: config.tint,
-        style: config.style,
+        tint,
+        style,
       });
     } catch (error) {
       this.drop(id);
@@ -303,7 +365,7 @@ export class Projversor {
     return this.layers.get(id)?.handle;
   }
 
-  /** Ids of the layers, bottom first. */
+  /** Ids of the layers, in insertion order. */
   get ids(): string[] {
     return [...this.layers.keys()];
   }
@@ -319,12 +381,16 @@ export class Projversor {
       return;
     }
     this.layers.delete(id);
+    if (!entry.field) {
+      this.stage?.setGeoJSON(id, null);
+      return;
+    }
     entry.field.destroy();
     if (entry.field.driving) {
-      const next = this.layers.values().next().value;
+      const next = this.fields()[0];
       if (next) {
-        next.field.driving = true;
-        void next.field.seek(this.requireStage().clock.ms);
+        next.driving = true;
+        void next.seek(this.requireStage().clock.ms);
       }
     }
     this.updateLandFill();
@@ -334,20 +400,26 @@ export class Projversor {
     return [...this.layers.values()].some((e) => e.type === type);
   }
 
-  /** The layer whose months drive the playhead. */
-  private driver(): FieldLayer | undefined {
+  /** The catalog layers, bottom first. */
+  private fields(): FieldLayer[] {
+    const fields: FieldLayer[] = [];
     for (const { field } of this.layers.values()) {
-      if (field.driving) {
-        return field;
+      if (field) {
+        fields.push(field);
       }
     }
-    return undefined;
+    return fields;
+  }
+
+  /** The layer whose months drive the playhead. */
+  private driver(): FieldLayer | undefined {
+    return this.fields().find((field) => field.driving);
   }
 
   /** Land is drawn opaque unless a shown layer also covers land. */
   private updateLandFill(): void {
-    const fill = [...this.layers.values()].every(
-      ({ field }) => !field.opened || field.layer.fillLand,
+    const fill = this.fields().every(
+      (field) => !field.opened || field.layer.fillLand,
     );
     this.stage?.setFillLand(fill);
   }
@@ -423,7 +495,7 @@ export class Projversor {
       return;
     }
     this.destroyed = true;
-    for (const { field } of this.layers.values()) {
+    for (const field of this.fields()) {
       field.destroy();
     }
     this.layers.clear();

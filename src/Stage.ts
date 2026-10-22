@@ -4,6 +4,7 @@ import land110 from "world-atlas/land-110m.json";
 import { Camera, type Rotate } from "./Camera";
 import { Clock } from "./Clock";
 import type { Emitter } from "./emitter";
+import type { GeoJSONLayer } from "./geojson";
 import { Overlay } from "./Overlay";
 import type { Preset } from "./presets";
 import { SphereParticles } from "./SphereParticles";
@@ -131,6 +132,16 @@ export class Stage {
   /** Draw land opaque, or not, from the next frame. */
   setFillLand(fill: boolean): void {
     this.overlay.fillLand = fill;
+    this.overlayKey = "";
+  }
+
+  /** Show a GeoJSON layer above everything, or remove it (null). */
+  setGeoJSON(id: string, layer: GeoJSONLayer | null): void {
+    if (layer) {
+      this.overlay.geojson.set(id, layer);
+    } else {
+      this.overlay.geojson.delete(id);
+    }
     this.overlayKey = "";
   }
 
