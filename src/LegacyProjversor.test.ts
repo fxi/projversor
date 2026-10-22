@@ -70,9 +70,7 @@ vi.mock("./GeoVideoField", () => ({
 }));
 
 vi.mock("./Overlay", () => ({
-  Overlay: class {
-    fillLand = true;
-  },
+  Overlay: class {},
 }));
 
 vi.mock("./SphereParticles", () => ({

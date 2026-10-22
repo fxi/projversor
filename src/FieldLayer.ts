@@ -109,8 +109,6 @@ export interface FieldLayerHost {
     type: K,
     detail: FieldLayerEvents[K],
   ): void;
-  /** A layer shows from this frame on. */
-  shown(layer: ProjversorLayer): void;
 }
 
 /**
@@ -311,7 +309,6 @@ export class FieldLayer {
     this.tintIdValue = tintId;
     this.tintChunks = tintChunks;
     this.chunksValue = chunks;
-    this.host.shown(layer);
     this.restyle(options.style);
     this.clock.setKindSpeed(layer.kind, options.speed);
     this.host.emit("layer", layer);

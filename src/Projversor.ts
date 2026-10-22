@@ -433,7 +433,6 @@ export class Projversor {
       stage.raster,
       {
         emit: (event, detail) => this.relay(id, event, detail),
-        shown: () => this.updateLandFill(),
       },
       gradeToColorGrade(style?.particles?.grade),
     );
@@ -491,7 +490,6 @@ export class Projversor {
         void next.seek(this.requireStage().clock.ms);
       }
     }
-    this.updateLandFill();
   }
 
   private has(type: ProjversorLayerType): boolean {
@@ -512,14 +510,6 @@ export class Projversor {
   /** The layer whose months drive the playhead. */
   private driver(): FieldLayer | undefined {
     return this.fields().find((field) => field.driving);
-  }
-
-  /** Land is drawn opaque unless a shown layer also covers land. */
-  private updateLandFill(): void {
-    const fill = this.fields().every(
-      (field) => !field.opened || field.layer.fillLand,
-    );
-    this.stage?.setFillLand(fill);
   }
 
   private relay<K extends keyof FieldLayerEvents>(

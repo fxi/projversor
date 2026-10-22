@@ -129,12 +129,6 @@ export class Stage {
     this.frameId = requestAnimationFrame((now) => this.tick(now));
   }
 
-  /** Draw land opaque, or not, from the next frame. */
-  setFillLand(fill: boolean): void {
-    this.overlay.fillLand = fill;
-    this.overlayKey = "";
-  }
-
   /** Show a GeoJSON layer above everything, or remove it (null). */
   setGeoJSON(id: string, layer: GeoJSONLayer | null): void {
     if (layer) {

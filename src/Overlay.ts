@@ -49,8 +49,6 @@ export class Overlay {
   private readonly mutate: () => GeoProjection;
   private readonly back: CanvasRenderingContext2D;
   private readonly front: CanvasRenderingContext2D;
-  /** Opaque land; off when the field also covers the continents. */
-  fillLand = true;
   /** GeoJSON layers drawn above everything, in insertion order. */
   readonly geojson = new Map<string, GeoJSONLayer>();
   private readonly colors: Record<(typeof COLOR_TOKENS)[number], string>;
@@ -110,18 +108,25 @@ export class Overlay {
       ctx.clearRect(0, 0, width, height);
     }
 
+    const land =
+      detailed && this.layers.landDetail
+        ? this.layers.landDetail
+        : this.layers.land;
+
+    // Below the GL canvas: ocean and land, so fields and images cover them.
     const back = geoPath(this.projection, this.back);
     this.back.beginPath();
     back(SPHERE);
     this.back.fillStyle = this.colors.ocean;
     this.back.fill();
+    this.back.beginPath();
+    back(land);
+    this.back.fillStyle = this.colors.land;
+    this.back.fill();
 
+    // Above it: lines and labels.
     const ctx = this.front;
     const path = geoPath(this.projection, ctx);
-    const land =
-      detailed && this.layers.landDetail
-        ? this.layers.landDetail
-        : this.layers.land;
 
     ctx.beginPath();
     path(GRATICULE);
@@ -131,10 +136,6 @@ export class Overlay {
 
     ctx.beginPath();
     path(land);
-    if (this.fillLand) {
-      ctx.fillStyle = this.colors.land;
-      ctx.fill();
-    }
     ctx.lineWidth = 0.8;
     ctx.strokeStyle = this.colors.coast;
     ctx.stroke();

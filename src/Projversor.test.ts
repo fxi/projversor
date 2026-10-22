@@ -53,7 +53,6 @@ vi.mock("./GeoVideoField", () => ({
 
 vi.mock("./Overlay", () => ({
   Overlay: class {
-    fillLand = true;
     readonly geojson = new Map();
     setLandDetail(): void {}
   },

@@ -33,8 +33,8 @@
   --zs-ease: cubic-bezier(0.16, 1, 0.3, 1);
   --zs-sans: "Inter Tight Variable", "Inter Tight", system-ui, sans-serif;
   /* Read by the projversor overlay: black sea and land, grey lines. */
-  --ocean: #000;
-  --land: #000;
+  --ocean: #111d23;
+  --land: #111;
   --coast: rgba(170, 170, 170, 0.55);
   --outline: rgba(255, 255, 255, 0.18);
   --graticule: rgba(255, 255, 255, 0.11);

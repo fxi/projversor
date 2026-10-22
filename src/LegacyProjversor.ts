@@ -98,7 +98,6 @@ export class LegacyProjversor {
         // LegacyProjversorEvents extends FieldLayerEvents: the same payload types.
         emit: (type, detail) =>
           this.events.emit(type, detail as LegacyProjversorEvents[typeof type]),
-        shown: (layer) => stage.setFillLand(layer.fillLand),
       },
       gradeToColorGrade(initial.style?.particles?.grade),
     );

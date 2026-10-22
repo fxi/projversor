@@ -30,8 +30,6 @@ export interface ProjversorLayer {
    * palette, one this renderer offers for the kind.
    */
   style: LayerStyleInput & { palette: string };
-  /** Draw land opaque: off for fields that also cover land. */
-  fillLand: boolean;
   /**
    * Default scalar entry id whose GeoVideo archive colors the particles (over
    * its catalog color domain); speed then sets their brightness. Its monthly
@@ -121,7 +119,6 @@ export function catalogLayers(
             ? PARTICLE_PALETTE
             : (entry.defaults.palette ?? "viridis"),
       },
-      fillLand: true,
       ...STYLES[id],
     };
     layers.push(base);

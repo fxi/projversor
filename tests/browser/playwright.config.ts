@@ -13,6 +13,8 @@ export default defineConfig({
   timeout: 120_000,
   reporter: [["list"]],
   expect: {
+    // SwiftShader captures are slow: room for the stability retries.
+    timeout: 15_000,
     // The baselines are the historical renderer's own pixels, which the
     // renderer reproduces exactly on SwiftShader: no tolerance. A 1 % change
     // of the trail fade already differs on 5 % of the stage.
