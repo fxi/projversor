@@ -20,6 +20,34 @@ function seededRandom(seed: number): () => number {
 }
 
 /**
+ * A 240×120 test image of rectangles only, so it draws the same on every
+ * run: translucent vertical bands, an opaque white frame and a transparent
+ * hole, to show orientation, alpha and edges.
+ */
+function testImage(doc: Document): HTMLCanvasElement {
+  const canvas = doc.createElement("canvas");
+  canvas.width = 240;
+  canvas.height = 120;
+  const ctx = canvas.getContext("2d")!;
+  const bands = ["#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231"];
+  bands.forEach((color, i) => {
+    ctx.globalAlpha = 0.6;
+    ctx.fillStyle = color;
+    ctx.fillRect(i * 48, 0, 48, 120);
+  });
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, 240, 6);
+  ctx.fillRect(0, 0, 6, 120);
+  ctx.fillRect(0, 114, 240, 6);
+  ctx.fillRect(234, 0, 6, 120);
+  // North-west marker: orientation at a glance.
+  ctx.fillRect(12, 12, 24, 24);
+  ctx.clearRect(96, 48, 48, 24);
+  return canvas;
+}
+
+/**
  * Render a scene deterministically through the public API: open it paused
  * at `TIME` (`init` resolves once the detailed coastlines are in use, `add`
  * once the frame at the playhead is decoded), then run a fixed number of
@@ -41,6 +69,13 @@ async function render(
   });
   await pv.init();
   await pv.add("scene", scene.type, { source: scene.layer });
+  if (scene.image) {
+    await pv.add("image", "image", {
+      image: testImage(stage.ownerDocument),
+      bounds: scene.image.bounds,
+      style: { opacity: scene.image.opacity },
+    });
+  }
   if (scene.geojson) {
     await pv.add("regions", "geojson", scene.geojson);
   }

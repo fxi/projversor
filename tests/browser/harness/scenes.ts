@@ -40,6 +40,8 @@ export interface Scene {
   zoom?: number;
   /** GeoJSON drawn above the field. */
   geojson?: GeoJSONLayerConfig;
+  /** A test image (harness/main.ts) drawn over the field. */
+  image?: { bounds: [number, number, number, number]; opacity: number };
   /** Morph toward a preset, captured after this many frames. */
   morph?: { preset: string; frames: number };
 }
@@ -92,5 +94,15 @@ export const SCENES: Scene[] = [
     rotate: [160, 0, 0],
     zoom: 1.6,
     geojson: NINO,
+  },
+  {
+    id: "image-antimeridian",
+    covers: "georeferenced image over a raster, across the antimeridian",
+    type: "scalar",
+    layer: "sea-water-temperature",
+    preset: "plate",
+    rotate: [180, 0, 0],
+    zoom: 1.6,
+    image: { bounds: [120, -30, 240, 30], opacity: 0.8 },
   },
 ];

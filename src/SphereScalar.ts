@@ -106,22 +106,35 @@ export class SphereScalar {
   }
 
   private drawMesh(p: Program, frame: ViewFrame, field: GeoVideoField): void {
-    const gl = this.gl;
-    const mesh = meshBounds(field.bounds);
-    const [cols, rows] = gridCells(mesh);
-    p.projection(frame);
-    p.mat3("u_rot", frame.rot);
-    p.vec4("u_grid", mesh);
-    p.int("u_cols", cols);
-    p.int("u_rows", rows);
-    p.float("u_max_jump", MAX_JUMP * frame.pxPerRadian);
-    gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-    gl.disable(gl.DEPTH_TEST);
-    gl.enable(gl.BLEND);
-    compositeBlend(gl);
-    gl.bindVertexArray(this.vao);
-    gl.drawArrays(gl.TRIANGLES, 0, cols * rows * 6);
-    gl.bindVertexArray(null);
-    gl.disable(gl.BLEND);
+    drawLonLatMesh(this.gl, this.vao, p, frame, field.bounds);
   }
+}
+
+/**
+ * Draw `p` (raster.vert.glsl) as a lon/lat mesh over `bounds`, projected
+ * with the view and blended over the bound framebuffer.
+ */
+export function drawLonLatMesh(
+  gl: WebGL2RenderingContext,
+  vao: WebGLVertexArrayObject,
+  p: Program,
+  frame: ViewFrame,
+  bounds: GeoVideoBounds,
+): void {
+  const mesh = meshBounds(bounds);
+  const [cols, rows] = gridCells(mesh);
+  p.projection(frame);
+  p.mat3("u_rot", frame.rot);
+  p.vec4("u_grid", mesh);
+  p.int("u_cols", cols);
+  p.int("u_rows", rows);
+  p.float("u_max_jump", MAX_JUMP * frame.pxPerRadian);
+  gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+  gl.disable(gl.DEPTH_TEST);
+  gl.enable(gl.BLEND);
+  compositeBlend(gl);
+  gl.bindVertexArray(vao);
+  gl.drawArrays(gl.TRIANGLES, 0, cols * rows * 6);
+  gl.bindVertexArray(null);
+  gl.disable(gl.BLEND);
 }

@@ -67,6 +67,22 @@ vi.mock("./SphereParticles", () => ({
   visibleCap: () => 1,
 }));
 
+const imagesDestroyed: number[][] = [];
+
+vi.mock("./SphereImage", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./SphereImage")>()),
+  SphereImage: class {
+    constructor(
+      _gl: unknown,
+      _image: unknown,
+      readonly bounds: number[],
+    ) {}
+    destroy(): void {
+      imagesDestroyed.push(this.bounds);
+    }
+  },
+}));
+
 vi.mock("./SphereScalar", () => ({
   SphereScalar: class {
     destroy(): void {}
@@ -238,6 +254,33 @@ describe("Projversor", () => {
       pv.add("bad", "geojson", { data: { type: "Map" } as never }),
     ).rejects.toThrow("must be a GeoJSON object");
     await pv.remove("zones");
+    expect(pv.ids).toEqual([]);
+  });
+
+  it("adds, restyles and removes an image, and checks its bounds and opacity", async () => {
+    const pv = new Projversor(fakeRoot().root, { interactive: false });
+    await pv.init();
+    const image = {} as ImageBitmap;
+    await expect(
+      pv.add("bad", "image", { image, bounds: [10, 0, -10, 20] }),
+    ).rejects.toThrow("bounds must be [west, south, east, north]");
+    await expect(
+      pv.add("bad", "image", {
+        image,
+        bounds: [0, 0, 10, 10],
+        style: { opacity: 2 },
+      }),
+    ).rejects.toThrow("opacity must be within 0–1");
+    const photo = await pv.add("photo", "image", {
+      image,
+      bounds: [160, -10, 200, 10],
+    });
+    expect(photo.bounds).toEqual([160, -10, 200, 10]);
+    await photo.update({ opacity: 0.5 });
+    expect(photo.style).toEqual({ opacity: 0.5 });
+    imagesDestroyed.length = 0;
+    await pv.remove("photo");
+    expect(imagesDestroyed).toEqual([[160, -10, 200, 10]]);
     expect(pv.ids).toEqual([]);
   });
 });

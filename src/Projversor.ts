@@ -17,6 +17,12 @@ import {
   type GeoJSONStyle,
 } from "./geojson";
 import { findLayer, type ProjversorLayer } from "./layers";
+import {
+  SphereImage,
+  loadImage,
+  parseImageBounds,
+  type ImageSource,
+} from "./SphereImage";
 import { Stage, type StageEvents, type StageInitial } from "./Stage";
 import type { Inset } from "./view";
 
@@ -24,7 +30,24 @@ import type { Inset } from "./view";
 const SOURCE_KIND = { particles: "vector", scalar: "scalar" } as const;
 
 export type FieldLayerType = keyof typeof SOURCE_KIND;
-export type ProjversorLayerType = FieldLayerType | "geojson";
+export type ProjversorLayerType = FieldLayerType | "image" | "geojson";
+
+/** A georeferenced image: equirectangular, north up. */
+export interface ImageLayerConfig {
+  /** Image url (loaded cross-origin) or a loaded image, bitmap or canvas. */
+  image: string | ImageSource;
+  /**
+   * West, south, east, north in degrees; east may pass 180 to cross the
+   * antimeridian. A 360° span repeats across the seam.
+   */
+  bounds: [number, number, number, number];
+  style?: ImageStyle;
+}
+
+export interface ImageStyle {
+  /** 0–1, over the image alpha. Default 1. */
+  opacity?: number;
+}
 
 /**
  * A small GeoJSON drawn as lines (and optional fill and labels) above the
@@ -183,11 +206,58 @@ export class GeoJSONLayerHandle {
   }
 }
 
-export type ProjversorLayerHandle = FieldLayerHandle | GeoJSONLayerHandle;
+/** What an image layer draws, shared by its entry and its handle. */
+interface ImageState {
+  sphere: SphereImage;
+  opacity: number;
+}
+
+function imageOpacity(style: ImageStyle | undefined, path: string): number {
+  const opacity = style?.opacity ?? 1;
+  if (!(opacity >= 0 && opacity <= 1)) {
+    throw new Error(`${path}.style.opacity must be within 0–1`);
+  }
+  return opacity;
+}
+
+/** A georeferenced image added to a projversor. */
+export class ImageLayerHandle {
+  readonly type = "image";
+
+  constructor(
+    readonly id: string,
+    private readonly state: ImageState,
+  ) {}
+
+  /** West, south, east, north in degrees. */
+  get bounds(): readonly number[] {
+    return this.state.sphere.bounds;
+  }
+
+  get style(): Required<ImageStyle> {
+    return { opacity: this.state.opacity };
+  }
+
+  /** Replace the style; drawn from the next frame. */
+  async update(style: ImageStyle): Promise<void> {
+    this.state.opacity = imageOpacity(style, `projversor layer "${this.id}"`);
+  }
+}
+
+export type ProjversorLayerHandle =
+  | FieldLayerHandle
+  | ImageLayerHandle
+  | GeoJSONLayerHandle;
 
 type Entry =
-  | { type: FieldLayerType; field: FieldLayer; handle: FieldLayerHandle }
-  | { type: "geojson"; field: null; handle: GeoJSONLayerHandle };
+  | {
+      type: FieldLayerType;
+      field: FieldLayer;
+      image: null;
+      handle: FieldLayerHandle;
+    }
+  | { type: "image"; field: null; image: ImageState; handle: ImageLayerHandle }
+  | { type: "geojson"; field: null; image: null; handle: GeoJSONLayerHandle };
 
 /**
  * Catalog layers on a sphere that morphs between world projections, for
@@ -257,9 +327,13 @@ export class Projversor {
     stage.start({
       advance: (dt) => this.driver()?.advanceTime(dt),
       draw: (frame, now, moving) => {
-        for (const field of this.fields()) {
-          field.follow();
-          field.draw(frame, now, moving);
+        for (const { field, image } of this.layers.values()) {
+          if (field) {
+            field.follow();
+            field.draw(frame, now, moving);
+          } else if (image) {
+            image.sphere.draw(frame, image.opacity);
+          }
         }
       },
     });
@@ -284,8 +358,9 @@ export class Projversor {
   /**
    * Add a layer on top of the others. A catalog layer resolves once its
    * first frame is decoded, and rejects for an unknown source, a source of
-   * another kind than `type`, or a second particles layer. A GeoJSON layer
-   * is drawn above all fields, whatever the order.
+   * another kind than `type`, or a second particles layer. An image
+   * resolves once loaded; fields and images draw in the order added. A
+   * GeoJSON layer is drawn above them all, whatever the order.
    */
   async add(
     id: string,
@@ -294,13 +369,18 @@ export class Projversor {
   ): Promise<GeoJSONLayerHandle>;
   async add(
     id: string,
+    type: "image",
+    config: ImageLayerConfig,
+  ): Promise<ImageLayerHandle>;
+  async add(
+    id: string,
     type: FieldLayerType,
     config: FieldLayerConfig,
   ): Promise<FieldLayerHandle>;
   async add(
     id: string,
     type: ProjversorLayerType,
-    config: FieldLayerConfig | GeoJSONLayerConfig,
+    config: FieldLayerConfig | ImageLayerConfig | GeoJSONLayerConfig,
   ): Promise<ProjversorLayerHandle> {
     const stage = this.requireStage();
     if (this.layers.has(id)) {
@@ -311,8 +391,22 @@ export class Projversor {
       const handle = new GeoJSONLayerHandle(id, layer, (shown) =>
         stage.setGeoJSON(id, shown),
       );
-      this.layers.set(id, { type, field: null, handle });
+      this.layers.set(id, { type, field: null, image: null, handle });
       stage.setGeoJSON(id, layer);
+      return handle;
+    }
+    if (type === "image") {
+      const path = `projversor layer "${id}"`;
+      const { image, bounds, style } = config as ImageLayerConfig;
+      const box = parseImageBounds(bounds, `${path}.bounds`);
+      const opacity = imageOpacity(style, path);
+      const source = await loadImage(image, this.root.ownerDocument);
+      if (this.destroyed || this.layers.has(id)) {
+        throw new Error(`projversor: layer "${id}" was superseded`);
+      }
+      const state = { sphere: new SphereImage(stage.gl, source, box), opacity };
+      const handle = new ImageLayerHandle(id, state);
+      this.layers.set(id, { type, field: null, image: state, handle });
       return handle;
     }
     if (!(type in SOURCE_KIND)) {
@@ -345,7 +439,7 @@ export class Projversor {
     );
     field.driving = !this.driver();
     const handle = new FieldLayerHandle(id, type, field);
-    this.layers.set(id, { type, field, handle });
+    this.layers.set(id, { type, field, image: null, handle });
     try {
       await field.open(layer, {
         at: this.timeSet ? stage.clock.ms : undefined,
@@ -381,6 +475,10 @@ export class Projversor {
       return;
     }
     this.layers.delete(id);
+    if (entry.image) {
+      entry.image.sphere.destroy();
+      return;
+    }
     if (!entry.field) {
       this.stage?.setGeoJSON(id, null);
       return;
@@ -495,8 +593,9 @@ export class Projversor {
       return;
     }
     this.destroyed = true;
-    for (const field of this.fields()) {
-      field.destroy();
+    for (const { field, image } of this.layers.values()) {
+      field?.destroy();
+      image?.sphere.destroy();
     }
     this.layers.clear();
     this.detach?.();
