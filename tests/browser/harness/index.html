@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>projversor · reference scenes</title>
+    <link rel="icon" href="data:," />
+    <style>
+      /*
+       * Overlay colors of the home page (demos/site), with an ocean and land
+       * lifted off the black page so the 2D back canvas, the GL composite
+       * over it and the land fill all show in the captures.
+       */
+      :root {
+        --ocean: #0b1a2a;
+        --land: #1a1a1a;
+        --coast: rgba(170, 170, 170, 0.55);
+        --outline: rgba(255, 255, 255, 0.18);
+        --graticule: rgba(255, 255, 255, 0.11);
+        --equator: rgba(255, 196, 92, 0.45);
+      }
+      html,
+      body {
+        margin: 0;
+        background: #000;
+      }
+      .stage {
+        position: relative;
+        width: 640px;
+        height: 480px;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stage" data-ref="stage"></main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
