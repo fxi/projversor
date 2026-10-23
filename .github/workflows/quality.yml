@@ -8,41 +8,19 @@ on:
 permissions:
   contents: read
 
-env:
-  # zartigl is built beside projversor (file:../zartigl); the ZARTIGL_REF
-  # repository variable picks another branch or tag than main.
-  ZARTIGL_REF: ${{ vars.ZARTIGL_REF || 'main' }}
-
 jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: projversor
-      - uses: actions/checkout@v4
-        with:
-          repository: fxi/zartigl
-          ref: ${{ env.ZARTIGL_REF }}
-          path: zartigl
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: |
-            projversor/package-lock.json
-            zartigl/package-lock.json
-      - run: npm ci --prefix zartigl --ignore-scripts
-      - run: npm run --prefix zartigl build:lib
       - run: npm ci --ignore-scripts
-        working-directory: projversor
       # Browser tests stay local: they need Chrome, live archives and the
       # macOS baselines (tests/browser/README.md).
-      - run: npm run format:check
-        working-directory: projversor
-      - run: npm run typecheck
-        working-directory: projversor
+      - run: npm run quality
       - run: npm test
-        working-directory: projversor
+      - run: npm run build:lib
       - run: npm run build:demos
-        working-directory: projversor

@@ -1,10 +1,6 @@
-# Run from this folder; the build context is the parent folder, which must
-# also hold zartigl (as in MapX submodules/).
 services:
   projversor:
-    build:
-      context: ..
-      dockerfile: projversor/Dockerfile
+    build: .
     image: ghcr.io/fxi/projversor:latest
     ports:
       - "8080:8080"

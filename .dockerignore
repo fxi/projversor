@@ -1,0 +1,14 @@
+# Sources only: no installs, builds or local data.
+.git
+.github
+.claude
+.playwright-mcp
+.env
+.env.*
+**/.DS_Store
+node_modules
+dist
+dist-*
+tests/browser/test-results
+playwright-report
+_tmp

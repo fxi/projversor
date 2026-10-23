@@ -15,24 +15,11 @@ concurrency:
   group: docker-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # zartigl is built beside projversor (file:../zartigl); the ZARTIGL_REF
-  # repository variable picks another branch or tag than main.
-  ZARTIGL_REF: ${{ vars.ZARTIGL_REF || 'main' }}
-
 jobs:
   image:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: projversor
-
-      - uses: actions/checkout@v4
-        with:
-          repository: fxi/zartigl
-          ref: ${{ env.ZARTIGL_REF }}
-          path: zartigl
 
       - uses: docker/setup-qemu-action@v3
 
@@ -54,12 +41,9 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha
 
-      # The context holds both repositories; Dockerfile.dockerignore
-      # (next to the Dockerfile) keeps it to their sources.
       - uses: docker/build-push-action@v6
         with:
           context: .
-          file: projversor/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
