@@ -14,8 +14,9 @@ zartigl's MapLibre layer instead.
 npm install @fxi/projversor
 ```
 
-An ES module with its types. `@fxi/zartigl`, d3 and the world atlas stay
-dependencies, so a page that also imports zartigl loads it once.
+An ES module with its types. `@fxi/zartigl` and d3 stay dependencies, so a
+page that also imports zartigl loads it once; the detailed coastlines load on
+demand.
 
 ## API
 
