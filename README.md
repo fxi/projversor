@@ -8,6 +8,15 @@ georeferenced images on top. Rendering primitives and the catalog come from
 `/catalog`, `/story`); projversor never touches MapLibre. In MapX, use
 zartigl's MapLibre layer instead.
 
+## Install
+
+```bash
+npm install @fxi/projversor
+```
+
+An ES module with its types. `@fxi/zartigl`, d3 and the world atlas stay
+dependencies, so a page that also imports zartigl loads it once.
+
 ## API
 
 ```ts
@@ -62,12 +71,18 @@ pv.destroy();
 
 ## Development
 
-zartigl is a sibling repository (`file:../zartigl`): build it first.
+zartigl comes from npm. To work on both at once, link the sibling
+repository, then reinstall to return to the npm version:
 
 ```bash
-npm run build:zartigl
+npm run --prefix ../zartigl build:lib && npm link ../zartigl
+npm install
+```
+
+```bash
 npm test                # unit tests
-npm run typecheck
+npm run quality         # prettier, eslint, tsc
+npm run build:lib       # dist/: the published package
 npm run test:browser    # reference renders and demo smoke tests
 npm run dev:minimal     # also dev:projection, dev:story, dev:site
 ```
@@ -81,8 +96,7 @@ like serve each one; `npm run build:demos` builds them all.
 
 The image serves the demos with nginx on port 8080: the explorer at `/`,
 the story at `/story/`, the site at `/site/` and the minimal page at
-`/minimal/` (`/healthz` for health checks). It is built from the folder
-holding both projversor and zartigl, as in MapX `submodules/`:
+`/minimal/` (`/healthz` for health checks).
 
 ```bash
 docker compose up -d --build   # from this folder; open http://localhost:8080
@@ -90,8 +104,17 @@ docker compose pull && docker compose up -d   # the published image
 ```
 
 CI publishes `ghcr.io/fxi/projversor` from `main` (`latest`) and from `v*`
-tags, building zartigl from its `main` branch, or from the `ZARTIGL_REF`
-repository variable.
+tags.
 
 The same demos are published to GitHub Pages from `main`
 (`https://fxi.github.io/projversor/`, `story/`, `site/`, `minimal/`).
+
+## Releases
+
+```bash
+npm run release:minor   # or release:patch, release:major
+```
+
+`npm version` bumps `package.json`, commits and tags `vX.Y.Z`, then the
+script pushes `main` with the tag. The tag publishes the package to npm
+(`publish.yml`, after quality, tests and `build:lib`) and the demo image.

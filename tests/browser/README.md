@@ -1,7 +1,6 @@
 # Browser tests
 
 ```bash
-npm run build:zartigl   # the code under test imports zartigl's dist
 npm run test:browser
 ```
 
