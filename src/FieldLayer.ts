@@ -453,6 +453,9 @@ export class FieldLayer {
   }
 
   private adopt(month: ProjversorMonth, chunkIndex: number, at?: number): void {
+    // Playback goes on while a picked month decodes and may prefetch the
+    // month after the old one: it does not follow this one.
+    this.dropUpcoming();
     this.field?.destroy();
     this.tint?.destroy();
     const { field } = month;

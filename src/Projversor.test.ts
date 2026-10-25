@@ -232,6 +232,51 @@ describe("Projversor", () => {
     expect(pv.ids).toEqual(["sst"]);
   });
 
+  it("plays on from a picked month, not from the one it replaced", async () => {
+    vi.mocked(loadChunks).mockImplementationOnce(
+      async (entryId) =>
+        ["jan", "feb", "mar"].map((month, i) => ({
+          manifestUrl: `${entryId}/${month}`,
+          temporal: {
+            mode: "fixed",
+            start: `2025-0${i + 1}-01T00:00:00Z`,
+            end: `2025-0${i + 1}-28T00:00:00Z`,
+          },
+        })) as Awaited<ReturnType<typeof loadChunks>>,
+    );
+    const pv = new Projversor(fakeRoot().root, {
+      time: Date.parse("2025-01-01"),
+      interactive: false,
+    });
+    await pv.init();
+    const adding = pv.add("sst", "scalar", { source: "sea-water-temperature" });
+    await flush();
+    resolveMonth(SST, "jan");
+    const sst = await adding;
+    // The handle's layer, to step its playhead without the render loop.
+    const { field } = sst as unknown as {
+      field: { advanceTime(dt: number): void };
+    };
+    const month = (name: string, start: string) => {
+      const url = `${SST}/${name}`;
+      const t = Date.parse(start);
+      manifestFor(url).resolve({ url, times: [t, t + 86_400_000] });
+    };
+    // March is picked; January plays on past its prefetch point meanwhile.
+    const picking = sst.openMonth(2);
+    field.advanceTime(0.4);
+    month("feb", "2025-02-01");
+    await flush();
+    month("mar", "2025-03-01");
+    await picking;
+    expect(sst.chunkIndex).toBe(2);
+    // Past March's end: April does not exist, the archive wraps to January.
+    field.advanceTime(0.4);
+    await flush();
+    field.advanceTime(0.4);
+    expect(sst.chunkIndex).toBe(0);
+  });
+
   it("relays layer events with the layer id and restyles through the handle", async () => {
     const pv = new Projversor(fakeRoot().root, { interactive: false });
     await pv.init();

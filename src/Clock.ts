@@ -6,7 +6,7 @@ import type { ProjversorLayer } from "./layers";
  */
 export const SPEEDS: Record<ProjversorLayer["kind"], number[]> = {
   vector: [0.5, 1, 2, 5],
-  scalar: [1, 2, 5, 10, 20],
+  scalar: [1, 2, 5, 10, 20, 40, 80],
 };
 const DEFAULT_SPEEDS: Record<ProjversorLayer["kind"], number> = {
   vector: 1,
