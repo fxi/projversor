@@ -1,4 +1,5 @@
 import { parseLayerStyle, type LayerStyleInput } from "@fxi/zartigl/catalog";
+import { parseTimeRange, type TimeRange } from "@fxi/zartigl/engine";
 import { SPEEDS } from "./Clock";
 import { STYLE_SUPPORT } from "./FieldLayer";
 import { parseGeoJSONLayer, type GeoJSONLayer } from "./geojson";
@@ -44,6 +45,12 @@ export interface ProjversorViewConfig {
    */
   style?: LayerStyleInput;
   playback?: ProjversorViewPlayback;
+  /**
+   * Time window playback loops over, as zartigl's `timeRange`:
+   * `{ start?, end? }` ISO dates or `{ trailing }` ISO 8601 duration. Each
+   * view sets its own: without one, the whole archive plays.
+   */
+  timeRange?: TimeRange;
   /** Projection morph duration from the previous scene. */
   transitionMs?: number;
   /** Side layouts: the paragraph follows the globe limb. */
@@ -60,6 +67,7 @@ const KEYS = new Set([
   "tint",
   "style",
   "playback",
+  "timeRange",
   "transitionMs",
   "wrap",
   "geojson",
@@ -211,6 +219,9 @@ export function parseProjversorView(
       `${path}.playback.time is not a date`,
     );
   }
+  if (config.timeRange !== undefined) {
+    parseTimeRange(config.timeRange, `${path}.timeRange`);
+  }
   if (config.tint !== undefined) {
     invariant(
       layer.kind === "vector" &&
@@ -231,12 +242,17 @@ export function parseProjversorView(
 }
 
 /**
- * The projversor state a view config shows. `style` is always set, so a view
- * without an override returns to the layer's own style, grade included.
+ * The projversor state a view config shows. `style` and `timeRange` are
+ * always set, so a view without them returns to the layer's own style, grade
+ * included, and to the whole archive.
  */
-export function projversorState(
-  config: ProjversorViewConfig,
-): Partial<ShareState> & { style: LayerStyleInput } {
+export function projversorState(config: ProjversorViewConfig): Omit<
+  Partial<ShareState>,
+  "timeRange"
+> & {
+  style: LayerStyleInput;
+  timeRange: TimeRange | null;
+} {
   const { style = {}, playback = {} } = config;
   return {
     layer: config.layer,
@@ -247,6 +263,7 @@ export function projversorState(
     speed: playback.speed,
     time: playback.time === undefined ? undefined : Date.parse(playback.time),
     style,
+    timeRange: config.timeRange ?? null,
   };
 }
 
@@ -297,7 +314,11 @@ export class ProjversorStoryView {
     const field = pv.get(VIEW_FIELD) as FieldLayerHandle | undefined;
     if (field && field.source.id === layer.id && field.tint === tint) {
       await field.update(state.style);
-      await pv.update({ speed: state.speed, time: state.time });
+      await pv.update({
+        speed: state.speed,
+        timeRange: state.timeRange,
+        time: state.time,
+      });
       return;
     }
     await pv.replace(
@@ -309,6 +330,7 @@ export class ProjversorStoryView {
         style: state.style,
         time: state.time,
         speed: state.speed,
+        timeRange: state.timeRange,
       },
     );
   }
@@ -320,9 +342,9 @@ export class ProjversorStoryView {
 
   /** Warm the cache for a view shown next. */
   preload(view: ProjversorViewDefinition): Promise<void> {
-    const { layer, playback } = parseProjversorView(view);
-    const at =
-      playback?.time === undefined ? undefined : Date.parse(playback.time);
+    const { layer, playback, timeRange } = parseProjversorView(view);
+    const time = playback?.time ?? timeRange?.start;
+    const at = time === undefined ? undefined : Date.parse(String(time));
     return preloadLayer(layer, at);
   }
 

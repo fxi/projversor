@@ -19,8 +19,11 @@ import {
   fadeToFrames,
   fadeToOpacity,
   loadGeoVideoManifest,
+  nextChunk,
   pairChunk,
+  timeRangeBounds,
   type ColorGrade,
+  type TimeRange,
 } from "@fxi/zartigl/engine";
 import type { Clock } from "./Clock";
 import { GeoVideoField } from "./GeoVideoField";
@@ -90,7 +93,37 @@ function destroyMonth(month: ProjversorMonth): void {
 
 interface Upcoming {
   index: number;
+  /** Where playback resumes in it; its start when omitted. */
+  at?: number;
   month: ProjversorMonth | null;
+}
+
+/** First and last sample times of an archive, epoch ms. */
+export function archiveSpan(
+  chunks: readonly CatalogGeoVideoSource[],
+): [number, number] {
+  const starts = chunks.map((c) => Date.parse(c.temporal?.start ?? ""));
+  const ends = chunks.map((c) =>
+    Date.parse(c.temporal?.end ?? c.temporal?.start ?? ""),
+  );
+  return [Math.min(...starts), Math.max(...ends)];
+}
+
+/**
+ * The month played after `index`, and where it starts: inside `range`, the
+ * next one there, wrapping to the first one there; else the next one,
+ * wrapping to the first. Null with a single month and no range.
+ */
+export function nextMonth(
+  chunks: readonly CatalogGeoVideoSource[],
+  index: number,
+  range: readonly [number, number] | null,
+): { index: number; at?: number } | null {
+  if (!range) {
+    return chunks.length < 2 ? null : { index: (index + 1) % chunks.length };
+  }
+  const next = nextChunk(chunks, chunks[index], { range, loop: true });
+  return next ? { index: chunks.indexOf(next.source), at: next.time } : null;
 }
 
 /** Events of a field layer and their payloads. */
@@ -145,6 +178,9 @@ export class FieldLayer {
   /** Style override of the current story view, over the layer's own. */
   private viewStyleValue: LayerStyleInput = {};
   private upcoming: Upcoming | null = null;
+  /** Time window playback loops over, as given and resolved on the archive. */
+  private timeRangeValue: TimeRange | null = null;
+  private rangeBounds: [number, number] | null = null;
   /** Bumped on every layer or month switch; stale loads drop out. */
   private loadId = 0;
   private pendingRespawn = false;
@@ -217,6 +253,42 @@ export class FieldLayer {
     return this.field?.times ?? [];
   }
 
+  /** Time window playback loops over, as given, or null for the archive. */
+  get timeRange(): TimeRange | null {
+    return this.timeRangeValue;
+  }
+
+  /** That window resolved on the archive, epoch ms, or null. */
+  get timeBounds(): readonly [number, number] | null {
+    return this.rangeBounds;
+  }
+
+  /**
+   * Loop playback over `range` (null: the whole archive). A playhead outside
+   * it moves to its start.
+   */
+  async setTimeRange(range: TimeRange | null): Promise<void> {
+    const bounds = this.resolveRange(range, this.chunksValue);
+    this.timeRangeValue = range;
+    this.rangeBounds = bounds;
+    // A prefetched month may lie outside the new window.
+    this.dropUpcoming();
+    const ms = this.clock.ms;
+    if (bounds && this.driving && (ms < bounds[0] || ms > bounds[1])) {
+      await this.seek(bounds[0]);
+    }
+  }
+
+  /** `range` resolved on an archive; null without a range or months. */
+  private resolveRange(
+    range: TimeRange | null,
+    chunks: readonly CatalogGeoVideoSource[],
+  ): [number, number] | null {
+    return range && chunks.length
+      ? timeRangeBounds(range, archiveSpan(chunks))
+      : null;
+  }
+
   /** Bounds of the displayed field, once a month shows. */
   get bounds(): GeoVideoField["bounds"] | null {
     return this.field?.bounds ?? null;
@@ -240,6 +312,8 @@ export class FieldLayer {
       speed?: number;
       /** Style override replacing the current one. */
       style?: LayerStyleInput;
+      /** Time window replacing the current one; null clears it. */
+      timeRange?: TimeRange | null;
     } = {},
   ): Promise<boolean> {
     const layer =
@@ -248,7 +322,8 @@ export class FieldLayer {
       throw new Error(`Unknown layer: ${String(layerOrId)}`);
     }
     checkStyle(options.style, layer);
-    const { at } = options;
+    const range =
+      options.timeRange === undefined ? this.timeRangeValue : options.timeRange;
     const tintId =
       layer.kind === "vector"
         ? options.tint === undefined
@@ -280,6 +355,15 @@ export class FieldLayer {
     if (!chunks.length) {
       throw new Error(`${layer.label} has no archive months`);
     }
+    const bounds = this.resolveRange(range, chunks);
+    // Inside a window, a time outside it starts the window.
+    const at =
+      bounds &&
+      (options.at === undefined ||
+        options.at < bounds[0] ||
+        options.at > bounds[1])
+        ? bounds[0]
+        : options.at;
     const shown = this.chunksValue[this.chunkIndexValue]?.temporal?.start;
     const holding =
       at === undefined
@@ -309,6 +393,8 @@ export class FieldLayer {
     this.tintIdValue = tintId;
     this.tintChunks = tintChunks;
     this.chunksValue = chunks;
+    this.timeRangeValue = range;
+    this.rangeBounds = bounds;
     this.restyle(options.style);
     this.clock.setKindSpeed(layer.kind, options.speed);
     this.host.emit("layer", layer);
@@ -324,8 +410,13 @@ export class FieldLayer {
     return chunk ? this.openChunk(chunk) : Promise.resolve();
   }
 
-  /** Move the playhead, opening the month that holds `ms` when needed. */
-  async seek(ms: number): Promise<void> {
+  /**
+   * Move the playhead, opening the month that holds `ms` when needed; kept
+   * inside the time window.
+   */
+  async seek(time: number): Promise<void> {
+    const bounds = this.rangeBounds;
+    const ms = bounds ? Math.min(Math.max(time, bounds[0]), bounds[1]) : time;
     const times = this.times;
     if (times.length && ms >= times[0] && ms <= times[times.length - 1]) {
       this.scrub(ms);
@@ -476,15 +567,21 @@ export class FieldLayer {
 
   /**
    * Decode the next month in the background so playback runs through the
-   * whole archive like a film, wrapping to the first month after the last.
+   * whole archive, or its time window, like a film, wrapping to the first
+   * month after the last.
    */
   private prefetchNext(): void {
-    if (this.upcoming || this.chunksValue.length < 2) {
+    const next = nextMonth(
+      this.chunksValue,
+      this.chunkIndexValue,
+      this.rangeBounds,
+    );
+    if (this.upcoming || !next || next.index === this.chunkIndexValue) {
       return;
     }
     const id = this.loadId;
-    const index = (this.chunkIndexValue + 1) % this.chunksValue.length;
-    const upcoming: Upcoming = { index, month: null };
+    const { index } = next;
+    const upcoming: Upcoming = { ...next, month: null };
     this.upcoming = upcoming;
     this.loadMonth(this.chunksValue[index])
       .then((month) => {
@@ -703,19 +800,24 @@ export class FieldLayer {
     const lastTime = times[times.length - 1];
     const stepMs = (lastTime - first) / (times.length - 1);
     this.clock.ms += dt * STEPS_PER_SECOND * this.speed * stepMs;
-    if ((this.clock.ms - first) / (lastTime - first) > PREFETCH_AT) {
+    // The month ends early when the time window does.
+    const bounds = this.rangeBounds;
+    const end = bounds ? Math.min(lastTime, bounds[1]) : lastTime;
+    if (this.clock.ms - first > PREFETCH_AT * (end - first)) {
       this.prefetchNext();
     }
-    if (this.clock.ms > lastTime) {
+    if (this.clock.ms > end) {
+      const next = nextMonth(this.chunksValue, this.chunkIndexValue, bounds);
       const upcoming = this.upcoming;
-      if (this.chunksValue.length < 2) {
-        this.clock.ms = first;
+      if (!next || next.index === this.chunkIndexValue) {
+        // The window, or the archive, is this month: replay it.
+        this.clock.ms = Math.min(Math.max(next?.at ?? first, first), end);
       } else if (upcoming?.month) {
         this.upcoming = null;
-        this.adopt(upcoming.month, upcoming.index);
+        this.adopt(upcoming.month, upcoming.index, upcoming.at);
         this.advanceTime(0);
       } else {
-        this.clock.ms = lastTime;
+        this.clock.ms = end;
         this.setStatus("Buffering…");
       }
     }

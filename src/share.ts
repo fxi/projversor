@@ -3,7 +3,11 @@ import {
   parseLayerStyle,
   type LayerStyleInput,
 } from "@fxi/zartigl/catalog";
-import { colorGradeToGrade } from "@fxi/zartigl/engine";
+import {
+  colorGradeToGrade,
+  parseTimeRange,
+  type TimeRange,
+} from "@fxi/zartigl/engine";
 
 /** Everything needed to reproduce the displayed view. */
 export interface ShareState {
@@ -22,6 +26,8 @@ export interface ShareState {
   tint: string;
   /** Style override over the layer's own: palette, particles, raster. */
   style?: LayerStyleInput;
+  /** Time window playback loops over; the whole archive when omitted. */
+  timeRange?: TimeRange;
 }
 
 const round = (value: number) => Number(value.toFixed(3));
@@ -41,7 +47,47 @@ export function encodeShare(state: ShareState): string {
   if (state.style && Object.keys(state.style).length) {
     params.set("st", JSON.stringify(state.style));
   }
+  if (state.timeRange) {
+    params.set("tr", encodeTimeRange(state.timeRange));
+  }
   return params.toString();
+}
+
+/**
+ * A time window as an ISO 8601 interval, either side may be empty
+ * ("2026-05-01/2026-10-31", "2026-05-01/"), or a trailing duration ("P6M").
+ */
+function encodeTimeRange(range: TimeRange): string {
+  if (range.trailing !== undefined) {
+    return range.trailing;
+  }
+  // A day when the time is midnight UTC, else the full ISO time.
+  const iso = (time: TimeRange["start"]) => {
+    if (time === undefined) {
+      return "";
+    }
+    const text = new Date(time).toISOString();
+    return text.endsWith("T00:00:00.000Z") ? text.slice(0, 10) : text;
+  };
+  return `${iso(range.start)}/${iso(range.end)}`;
+}
+
+/** A shared time window, or undefined when it is malformed. */
+function parseSharedTimeRange(text: string | null): TimeRange | undefined {
+  if (!text) {
+    return undefined;
+  }
+  const [start, end] = text.split("/");
+  try {
+    return parseTimeRange(
+      text.includes("/")
+        ? { start: start || undefined, end: end || undefined }
+        : { trailing: text },
+      "tr",
+    );
+  } catch {
+    return undefined;
+  }
 }
 
 /** A shared style, or undefined when it is malformed. */
@@ -110,6 +156,10 @@ export function decodeShare(hash: string): Partial<ShareState> {
   const style = mergeStyles(legacyStyle(params), parseStyle(params.get("st")));
   if (Object.keys(style).length) {
     state.style = style;
+  }
+  const timeRange = parseSharedTimeRange(params.get("tr"));
+  if (timeRange) {
+    state.timeRange = timeRange;
   }
   const play = params.get("play");
   if (play === "0" || play === "1") {

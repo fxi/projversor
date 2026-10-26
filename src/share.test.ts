@@ -78,6 +78,22 @@ describe("share hash", () => {
     expect(decodeShare("g=1,2")).toEqual({});
   });
 
+  it("round-trips a time window as an ISO interval or a duration", () => {
+    const fixed = { start: "2026-05-01", end: "2026-10-31" };
+    const hash = encodeShare({ ...state, timeRange: fixed });
+    expect(hash).toContain("tr=2026-05-01%2F2026-10-31");
+    expect(decodeShare(hash).timeRange).toEqual(fixed);
+    expect(
+      decodeShare(encodeShare({ ...state, timeRange: { trailing: "P6M" } }))
+        .timeRange,
+    ).toEqual({ trailing: "P6M" });
+    expect(decodeShare("tr=2026-05-01%2F").timeRange).toEqual({
+      start: "2026-05-01",
+    });
+    expect(decodeShare("tr=soon").timeRange).toBeUndefined();
+    expect(encodeShare(state)).not.toContain("tr=");
+  });
+
   it("decodes an empty hash to nothing", () => {
     expect(decodeShare("")).toEqual({});
     expect(decodeShare("#")).toEqual({});

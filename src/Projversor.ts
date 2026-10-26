@@ -2,7 +2,11 @@ import type {
   CatalogGeoVideoSource,
   LayerStyleInput,
 } from "@fxi/zartigl/catalog";
-import { gradeToColorGrade, type ColorGrade } from "@fxi/zartigl/engine";
+import {
+  gradeToColorGrade,
+  type ColorGrade,
+  type TimeRange,
+} from "@fxi/zartigl/engine";
 import { clampZoom, type Camera, type Rotate } from "./Camera";
 import { Emitter } from "./emitter";
 import {
@@ -71,6 +75,12 @@ export interface FieldLayerConfig {
   time?: number;
   /** Playback speed multiplier for the source's kind (see SPEEDS). */
   speed?: number;
+  /**
+   * Time window playback loops over, as zartigl's `timeRange`: `start`
+   * and `end`, or `trailing` before the latest time. Omitted: the current
+   * one; null: the whole archive.
+   */
+  timeRange?: TimeRange | null;
   /** Ease the view onto a regional source once it shows. */
   frame?: boolean;
 }
@@ -98,6 +108,8 @@ export interface ProjversorState {
   playing?: boolean;
   /** Playback speed multiplier, one of SPEEDS for the clock layer's kind. */
   speed?: number;
+  /** Time window of the clock layer (see FieldLayerConfig); null clears it. */
+  timeRange?: TimeRange | null;
   /** Hold playback, e.g. while a timeline thumb is held. */
   held?: boolean;
   /** Ocean, land and line colors; omitted ones stay. */
@@ -193,6 +205,16 @@ export class FieldLayerHandle {
   /** Playback speed multiplier of the source's kind. */
   get speed(): number {
     return this.field.speed;
+  }
+
+  /** Time window playback loops over, or null for the whole archive. */
+  get timeRange(): TimeRange | null {
+    return this.field.timeRange;
+  }
+
+  /** That window resolved on the archive, epoch ms, or null. */
+  get timeBounds(): readonly [number, number] | null {
+    return this.field.timeBounds;
   }
 
   /** Open month `index` of {@link chunks} at its start. */
@@ -534,6 +556,7 @@ export class Projversor {
       tint: config.tint,
       style: config.style,
       speed: config.speed,
+      timeRange: config.timeRange,
     });
     if (!shown) {
       return;
@@ -662,6 +685,9 @@ export class Projversor {
     const driver = this.driver();
     if (state.speed !== undefined && driver) {
       stage.clock.setKindSpeed(driver.layer.kind, state.speed);
+    }
+    if (state.timeRange !== undefined && driver) {
+      await driver.setTimeRange(state.timeRange);
     }
     if (state.time !== undefined) {
       if (driver) {

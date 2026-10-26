@@ -140,6 +140,26 @@ describe("parseProjversorView", () => {
   });
 });
 
+describe("parseProjversorView timeRange", () => {
+  it("accepts zartigl's time range and rejects a malformed one with its path", () => {
+    const range = { start: "2026-05-01", end: "2026-10-31" };
+    expect(parseProjversorView(view({ timeRange: range })).timeRange).toEqual(
+      range,
+    );
+    expect(() =>
+      parseProjversorView(view({ timeRange: { trailing: "P6M" } })),
+    ).not.toThrow();
+    expect(() =>
+      parseProjversorView(
+        view({ timeRange: { start: "2026-10-31", end: "2026-05-01" } }),
+      ),
+    ).toThrow("views.probe.config.timeRange.start must not follow its end");
+    expect(() =>
+      parseProjversorView(view({ timeRange: { loop: true } })),
+    ).toThrow("views.probe.config.timeRange.loop is not a time range key");
+  });
+});
+
 describe("projversorState", () => {
   it("maps a config to the projversor state", () => {
     const state = projversorState(
@@ -164,6 +184,7 @@ describe("projversorState", () => {
   it("sets an empty style without an override, so the next view resets", () => {
     const state = projversorState(parseProjversorView(view({})));
     expect(state.style).toEqual({});
+    expect(state.timeRange).toBeNull();
   });
 });
 
@@ -223,6 +244,7 @@ describe("ProjversorStoryView", () => {
         style: {},
         time: undefined,
         speed: undefined,
+        timeRange: null,
       },
     ]);
     calls.length = 0;
@@ -237,7 +259,11 @@ describe("ProjversorStoryView", () => {
     expect(calls).toContainEqual(["restyle", { palette: "viridis" }]);
     expect(calls).toContainEqual([
       "update",
-      { speed: undefined, time: Date.parse("2025-01-15T00:00:00Z") },
+      {
+        speed: undefined,
+        timeRange: null,
+        time: Date.parse("2025-01-15T00:00:00Z"),
+      },
     ]);
   });
 
@@ -251,5 +277,29 @@ describe("ProjversorStoryView", () => {
     await story.activate(scene("b", { layer: "surface-wind" }));
     expect(calls).toContainEqual(["remove", "story-geojson"]);
     expect(calls.some((c) => c[0] === "add")).toBe(false);
+  });
+});
+
+describe("ProjversorStoryView time range", () => {
+  it("passes a view's range on and clears it with the next view", async () => {
+    const { pv, calls } = fakeProjversor();
+    const story = new ProjversorStoryView(pv, false);
+    const timeRange = { start: "2026-05-01", end: "2026-10-31" };
+    await story.activate({
+      id: "a",
+      config: { layer: "surface-wind", preset: "globe", timeRange },
+    });
+    expect(calls.find((c) => c[0] === "replace")?.[3]).toMatchObject({
+      timeRange,
+    });
+    calls.length = 0;
+    await story.activate({
+      id: "b",
+      config: { layer: "surface-wind", preset: "mollweide" },
+    });
+    expect(calls).toContainEqual([
+      "update",
+      { speed: undefined, timeRange: null, time: undefined },
+    ]);
   });
 });

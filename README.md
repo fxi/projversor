@@ -37,7 +37,10 @@ const currents = await pv.add("currents", "particles", {
   tint: null, // particles colored by speed; or a scalar entry id
   style: { palette: "viridis" },
 });
-await pv.add("sst", "scalar", { source: "sea-water-temperature" });
+await pv.add("sst", "scalar", {
+  source: "sea-water-temperature",
+  timeRange: { start: "2026-05-01", end: "2026-10-31" }, // as zartigl's
+});
 await pv.add("photo", "image", {
   image: "https://example.org/map.png", // or a loaded image or canvas
   bounds: [120, -30, 240, 30], // west, south, east, north
@@ -58,7 +61,10 @@ pv.destroy();
 - **Layers.** Fields and images draw in the order added; GeoJSON (lines,
   fill, labels) always above them. One particles layer at a time.
 - **Time.** One playhead. The first field layer drives it through its
-  months; the others follow and load their own months.
+  months; the others follow and load their own months. Its `timeRange`, the
+  same as zartigl's (`{ start?, end? }` or `{ trailing: "P6M" }`), loops
+  playback over that window instead of the whole archive; `null` clears it.
+  Share links carry it as `tr=2026-05-01/2026-10-31` or `tr=P6M`.
 - **`replace`** switches a layer's source, tint or style in place: the shown
   layer stays until the new month is decoded. A later call supersedes one
   still loading; a failed one keeps the shown layer.
@@ -68,7 +74,8 @@ pv.destroy();
   `--outline`, read at `init()`; `colors` (option or `update`) overrides
   them at any time.
 - **Stories.** `ProjversorStoryView` adapts a projversor to the
-  `@fxi/zartigl/story` registry; a view config may carry a `geojson`.
+  `@fxi/zartigl/story` registry; a view config may carry a `geojson`
+  and a `timeRange`.
 
 ## Development
 

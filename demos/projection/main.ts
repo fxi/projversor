@@ -149,6 +149,7 @@ class ProjectionDemo {
             : undefined,
       style: shared.style,
       speed: shared.speed,
+      timeRange: shared.timeRange,
       frame: !hasView,
     });
     this.gradePanel.value = this.field!.grade;
@@ -371,6 +372,7 @@ class ProjectionDemo {
       speed: field.speed,
       tint: field.tint ?? "",
       style: styleForKind(field.style, field.source.kind),
+      timeRange: field.timeRange ?? undefined,
     };
   }
 
