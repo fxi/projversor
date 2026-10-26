@@ -24,6 +24,13 @@ describe("rampGradient", () => {
     expect(positions[positions.length - 1]).toBe(100);
     expect(positions).toEqual([...positions].sort((a, b) => a - b));
   });
+
+  it("layers a checkerboard under palettes with transparent stops", () => {
+    expect(rampGradient("plasma")).not.toContain("conic");
+    expect(rampGradient("heat-alert")).toMatch(
+      /^linear-gradient\(to top, #fde72500 0%.*\), repeating-conic-gradient/,
+    );
+  });
 });
 
 describe("legendTicks", () => {
@@ -166,6 +173,11 @@ describe("formatUnit", () => {
     expect(formatUnit("m s-1")).toBe("m/s");
     expect(formatUnit("degrees_C")).toBe("°C");
     expect(formatUnit("m")).toBe("m");
+  });
+
+  it("shortens catalog units for the legend", () => {
+    expect(formatUnit("degree_Celsius_weeks")).toBe("°C-weeks");
+    expect(formatUnit("mmol m-3")).toBe("mmol/m³");
   });
 });
 

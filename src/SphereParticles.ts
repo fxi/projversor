@@ -57,7 +57,7 @@ export class SphereParticles {
       throw new Error("Float render targets are not supported");
     }
     this.advect = new Program(gl, quadVert, withZartiglChunks(advectFrag));
-    this.draw = new Program(gl, drawVert, drawFrag);
+    this.draw = new Program(gl, withZartiglChunks(drawVert), drawFrag);
     this.fade = new Program(gl, quadVert, fadeFrag);
     this.composite = new Program(
       gl,
@@ -186,6 +186,7 @@ export class SphereParticles {
         // Unused, but kept off the units of other sampler types.
         p.int("u_tint0", 0);
         p.int("u_tint1", 1);
+        p.int("u_tint_mask", 0);
       }
       gl.enable(gl.BLEND);
       // Straight color over the trails, alpha accumulated as coverage

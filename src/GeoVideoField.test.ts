@@ -1,13 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { scalarTexels, timeBracket, velocityTexels } from "./GeoVideoField";
+import { timeBracket, velocityTexels } from "./GeoVideoField";
 
 describe("field texels", () => {
-  it("packs scalar values as (value, validity), zero where masked", () => {
-    expect(Array.from(scalarTexels(new Float32Array([12.5, NaN])))).toEqual([
-      12.5, 1, 0, 0,
-    ]);
-  });
-
   it("packs vector components as (u, v, validity, 0)", () => {
     const texels = velocityTexels({
       u: new Float32Array([0.5, NaN]),

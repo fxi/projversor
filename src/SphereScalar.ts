@@ -72,7 +72,8 @@ export class SphereScalar {
     if (!field.bind(p, ms)) {
       return false;
     }
-    p.texture("u_ramp", 2, style.ramp);
+    // Units 0-2 hold the field: two frames and the mask.
+    p.texture("u_ramp", 3, style.ramp);
     p.vec2("u_domain", ...style.domain);
     p.float("u_opacity", style.opacity);
     p.float("u_vibrance", style.vibrance);

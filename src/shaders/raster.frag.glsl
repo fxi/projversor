@@ -25,6 +25,8 @@ void main() {
         discard;
     }
     float t = clamp((s.x / s.y - u_domain.x) / (u_domain.y - u_domain.x), 0.0, 1.0);
-    vec3 color = applyVibrance(texture(u_ramp, vec2(t, 0.5)).rgb, u_vibrance);
-    o_color = vec4(color, u_opacity);
+    // Palettes with transparent stops fade low values out.
+    vec4 ramp = texture(u_ramp, vec2(t, 0.5));
+    vec3 color = applyVibrance(ramp.rgb, u_vibrance);
+    o_color = vec4(color, ramp.a * u_opacity);
 }

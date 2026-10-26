@@ -1,10 +1,11 @@
 import {
   GeoVideoScalarSource,
   GeoVideoVectorSource,
+  geoVideoScalarUniforms,
   geoVideoTimelineValues,
   type GeoVideoBounds,
-  type GeoVideoFrameSource,
   type GeoVideoManifest,
+  type GeoVideoScalarFrame,
   type GeoVideoVectorFrame,
 } from "@fxi/zartigl/engine";
 import { isGlobalGrid, type Program } from "./view";
@@ -32,19 +33,6 @@ export const TINT_UNIFORMS: FieldUniforms = {
   mix: "u_tint_mix",
   bounds: "u_tint_bounds",
 };
-
-/** Masked scalar values as (value, validity) texels. */
-export function scalarTexels(values: Float32Array): Float32Array {
-  const texels = new Float32Array(values.length * 2);
-  for (let i = 0; i < values.length; i++) {
-    const value = values[i];
-    if (!Number.isNaN(value)) {
-      texels[i * 2] = value;
-      texels[i * 2 + 1] = 1;
-    }
-  }
-  return texels;
-}
 
 /** Interleaves masked u/v planes into (u, v, validity, 0) texels. */
 export function velocityTexels(frame: GeoVideoVectorFrame): Float32Array {
@@ -88,21 +76,24 @@ export function timeBracket(
 }
 
 /**
- * GeoVideo frames as float textures, decoded ahead of the playhead: vector
- * frames as (u, v, validity, 0), scalar frames as (value, validity). Binds
- * two consecutive time steps and their mix under VELOCITY_UNIFORMS for a
- * vector field, TINT_UNIFORMS for a scalar one.
+ * GeoVideo frames as textures, decoded ahead of the playhead: vector frames
+ * as float (u, v, validity, 0), scalar frames as the browser decodes them,
+ * turned into values in the shader by zartigl's GEOVIDEO_SCALAR_GLSL (with a
+ * static mask texture), the decoder of its MapLibre layer. Binds two
+ * consecutive time steps and their mix under VELOCITY_UNIFORMS for a vector
+ * field, TINT_UNIFORMS for a scalar one.
  */
 export class GeoVideoField {
   readonly times: number[];
   readonly bounds: GeoVideoBounds;
-  private readonly source: GeoVideoFrameSource<unknown>;
-  private readonly texels: (frame: unknown) => Float32Array;
-  /** 4 for vector texels, 2 for scalar ones. */
-  private readonly channels: number;
+  /** Vector field (particles); false for a scalar one (raster or tint). */
+  readonly vector: boolean;
+  private readonly source: GeoVideoVectorSource | GeoVideoScalarSource;
   private readonly uniforms: FieldUniforms;
   private readonly textures = new Map<number, WebGLTexture>();
   private readonly pending = new Map<number, Promise<void>>();
+  /** Static validity of a scalar field, uploaded with its first frame. */
+  private mask: WebGLTexture | null = null;
   private pair: [WebGLTexture, WebGLTexture, number] | null = null;
   private destroyed = false;
 
@@ -110,24 +101,16 @@ export class GeoVideoField {
     private readonly gl: WebGL2RenderingContext,
     readonly manifest: GeoVideoManifest,
   ) {
-    if (manifest.encoding.kind === "vector-luma") {
+    this.vector = manifest.encoding.kind === "vector-luma";
+    if (this.vector) {
       this.source = new GeoVideoVectorSource(manifest, { cacheSize: 2 });
-      this.texels = (frame) => velocityTexels(frame as GeoVideoVectorFrame);
-      this.channels = 4;
       this.uniforms = VELOCITY_UNIFORMS;
     } else {
       this.source = new GeoVideoScalarSource(manifest, { cacheSize: 2 });
-      this.texels = (frame) => scalarTexels(frame as Float32Array);
-      this.channels = 2;
       this.uniforms = TINT_UNIFORMS;
     }
     this.times = geoVideoTimelineValues(manifest);
     this.bounds = manifest.bounds;
-  }
-
-  /** Vector field (particles); false for a scalar one (raster or tint). */
-  get vector(): boolean {
-    return this.channels === 4;
   }
 
   /** Fixed catalog color domain of a scalar field. */
@@ -177,7 +160,10 @@ export class GeoVideoField {
     }
   }
 
-  /** False until a first frame is available. */
+  /**
+   * False until a first frame is available. Takes `unit` and `unit + 1`,
+   * and `unit + 2` for the mask of a scalar field.
+   */
   bind(program: Program, ms: number, unit = 0): boolean {
     const { index, fraction } = timeBracket(this.times, ms);
     const next = Math.min(index + 1, this.times.length - 1);
@@ -200,6 +186,14 @@ export class GeoVideoField {
     program.texture(names.b, unit + 1, this.pair[1]);
     program.float(names.mix, this.pair[2]);
     program.vec4(names.bounds, this.bounds);
+    if (this.mask && this.manifest.encoding.kind === "scalar-luma") {
+      const { codeRange, valueRange } = geoVideoScalarUniforms(
+        this.manifest.encoding,
+      );
+      program.texture("u_tint_mask", unit + 2, this.mask);
+      program.vec2("u_code_range", ...codeRange);
+      program.vec2("u_value_range", ...valueRange);
+    }
     return true;
   }
 
@@ -211,6 +205,8 @@ export class GeoVideoField {
       this.gl.deleteTexture(texture);
     }
     this.textures.clear();
+    this.gl.deleteTexture(this.mask);
+    this.mask = null;
     this.pair = null;
   }
 
@@ -239,7 +235,69 @@ export class GeoVideoField {
     return job;
   }
 
-  private upload(frame: unknown): WebGLTexture {
+  private upload(
+    frame: GeoVideoVectorFrame | GeoVideoScalarFrame,
+  ): WebGLTexture {
+    const gl = this.gl;
+    const { width, height } = this.source;
+    const texture = this.gridTexture();
+    if (this.vector) {
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA16F,
+        width,
+        height,
+        0,
+        gl.RGBA,
+        gl.FLOAT,
+        velocityTexels(frame as GeoVideoVectorFrame),
+      );
+    } else {
+      // The decoded pixels as they are, like zartigl's GeoVideoLayer.
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA8,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        frame as GeoVideoScalarFrame,
+      );
+      this.mask ??= this.uploadMask();
+    }
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    return texture;
+  }
+
+  /** The source's mask, loaded with its first frame, as an R8 texture. */
+  private uploadMask(): WebGLTexture | null {
+    const mask = this.source.mask;
+    if (!mask) {
+      return null;
+    }
+    const gl = this.gl;
+    const texture = this.gridTexture();
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.R8,
+      this.source.width,
+      this.source.height,
+      0,
+      gl.RED,
+      gl.UNSIGNED_BYTE,
+      mask,
+    );
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    return texture;
+  }
+
+  /** A bound, linearly filtered texture over the field grid. */
+  private gridTexture(): WebGLTexture {
     const gl = this.gl;
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -252,19 +310,6 @@ export class GeoVideoField {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    const vector = this.channels === 4;
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      vector ? gl.RGBA16F : gl.RG16F,
-      this.source.width,
-      this.source.height,
-      0,
-      vector ? gl.RGBA : gl.RG,
-      gl.FLOAT,
-      this.texels(frame),
-    );
-    gl.bindTexture(gl.TEXTURE_2D, null);
     return texture;
   }
 

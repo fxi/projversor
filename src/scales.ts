@@ -1,17 +1,23 @@
-import { resolveColorRamp } from "@fxi/zartigl/engine";
+import { formatUnit, resolveColorRamp } from "@fxi/zartigl/engine";
 
 /**
  * Css gradient of a palette, bottom to top. Stops are sorted numerically:
  * integer-like keys ("0", "1") would otherwise enumerate first and scramble
- * the gradient.
+ * the gradient. A palette with transparent stops (#rrggbbaa) gets a
+ * checkerboard layer underneath, so the faded part reads as see-through.
  */
 export function rampGradient(palette: string): string {
-  const stops = Object.entries(resolveColorRamp(palette))
+  const colors = Object.entries(resolveColorRamp(palette))
     .map(([stop, color]) => [Number(stop), color] as const)
-    .sort((a, b) => a[0] - b[0])
-    .map(([stop, color]) => `${color} ${stop * 100}%`);
-  return `linear-gradient(to top, ${stops.join(", ")})`;
+    .sort((a, b) => a[0] - b[0]);
+  const stops = colors.map(([stop, color]) => `${color} ${stop * 100}%`);
+  const gradient = `linear-gradient(to top, ${stops.join(", ")})`;
+  const alpha = colors.some(([, color]) => /^#[0-9a-f]{8}$/i.test(color));
+  return alpha ? `${gradient}, ${CHECKERBOARD}` : gradient;
 }
+
+const CHECKERBOARD =
+  "repeating-conic-gradient(#555 0 25%, #333 0 50%) 0 0 / 8px 8px";
 
 /** Position on the ramp of a value; the shaders color by sqrt(value / max). */
 export function rampPosition(value: number, max: number): number {
@@ -229,13 +235,8 @@ export function legendLabels(
   return [text(min), text(max)];
 }
 
-/** "m s-1" → "m/s", "degrees_C" → "°C". */
-export function formatUnit(unit: string | undefined): string {
-  if (unit === "degrees_C" || unit === "degC") {
-    return "°C";
-  }
-  return (unit ?? "").replace(/ s-1$/, "/s").replace(/ s-2$/, "/s²");
-}
+/** "m s-1" → "m/s", "degree_Celsius_weeks" → "°C-weeks": zartigl's labels. */
+export { formatUnit };
 
 /**
  * Round values (1, 2, 2.5 or 5 × 10ⁿ apart, about five intervals) within

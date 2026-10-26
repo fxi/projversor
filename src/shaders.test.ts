@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import { withZartiglChunks } from "./glsl";
 import advectSource from "./shaders/advect.frag.glsl";
 import compositeSource from "./shaders/composite.frag.glsl";
+import drawSource from "./shaders/draw.vert.glsl";
 import rasterSource from "./shaders/raster.frag.glsl";
 import rasterVert from "./shaders/raster.vert.glsl";
 
 // The shaders as compiled: zartigl chunks inserted.
 const advectFrag = withZartiglChunks(advectSource);
 const compositeFrag = withZartiglChunks(compositeSource);
+const drawVert = withZartiglChunks(drawSource);
 const rasterFrag = withZartiglChunks(rasterSource);
 
 describe("projversor advection randomness", () => {
@@ -30,7 +32,19 @@ describe("projversor grids", () => {
 
   it("applies the catalog vibrance like zartigl's scalar shaders", () => {
     expect(rasterFrag).toContain("vec3 applyVibrance(vec3 c, float v)");
-    expect(rasterFrag).toContain("applyVibrance(texture(u_ramp");
+    expect(rasterFrag).toContain("applyVibrance(ramp.rgb");
+  });
+
+  it("keeps the ramp alpha so palettes can fade low values out", () => {
+    expect(rasterFrag).toContain("ramp.a * u_opacity");
+  });
+
+  it("decodes scalar frames with zartigl's GeoVideo decoder, on the GPU", () => {
+    for (const shader of [rasterFrag, drawVert]) {
+      expect(shader).not.toContain("/// @zartigl");
+      expect(shader).toContain("float geoVideoScalarValue(float r)");
+      expect(shader).toContain("geoVideoScalarValue(r) * validity");
+    }
   });
 
   it("grades the trail composite with zartigl's shared helper", () => {

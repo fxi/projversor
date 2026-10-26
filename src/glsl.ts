@@ -1,5 +1,6 @@
 import {
   COLOR_GRADE_GLSL,
+  GEOVIDEO_SCALAR_GLSL,
   RANDOM_GLSL,
   VIBRANCE_GLSL,
 } from "@fxi/zartigl/engine";
@@ -7,6 +8,7 @@ import {
 /** zartigl's shared GLSL chunks, which this build cannot `#include`. */
 const CHUNKS: Record<string, string> = {
   COLOR_GRADE_GLSL,
+  GEOVIDEO_SCALAR_GLSL,
   RANDOM_GLSL,
   VIBRANCE_GLSL,
 };
