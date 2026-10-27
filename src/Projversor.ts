@@ -90,6 +90,11 @@ export interface ProjversorOptions extends StageInitial {
   time?: number;
   /** Drag, pinch and wheel on the view. Default true. */
   interactive?: boolean;
+  /**
+   * init() waits for the detailed coastlines (a large module). False starts
+   * drawing, and loading layers, at once on the coarse ones. Default true.
+   */
+  waitForLandDetail?: boolean;
 }
 
 /** View and playback; omitted keys keep their value. */
@@ -344,7 +349,9 @@ export class Projversor {
 
   /**
    * Create the canvases in the root and the GL context, and start drawing.
-   * Resolves once the detailed coastlines are in use.
+   * Resolves once the detailed coastlines are in use, unless
+   * `waitForLandDetail` is false: then as soon as drawing starts, with the
+   * coarse coastlines until the detailed ones arrive (see {@link landDetail}).
    */
   async init(): Promise<void> {
     if (this.destroyed) {
@@ -398,7 +405,17 @@ export class Projversor {
     if (this.options.interactive ?? true) {
       this.detach = stage.attachInteraction();
     }
-    await stage.landDetail;
+    if (this.options.waitForLandDetail ?? true) {
+      await stage.landDetail;
+    }
+  }
+
+  /** Resolves once the detailed coastlines are in use; after init(). */
+  get landDetail(): Promise<void> {
+    return (
+      this.stage?.landDetail ??
+      Promise.reject(new Error("projversor: not initialized"))
+    );
   }
 
   // ---- events ------------------------------------------------------------

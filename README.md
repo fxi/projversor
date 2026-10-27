@@ -29,6 +29,7 @@ const pv = new Projversor(root, {
   playing: true,
   interactive: true, // drag, pinch, wheel
   colors: { ocean: "#111d23" }, // over the css custom properties
+  waitForLandDetail: true, // false: init() resolves before the 50m coastline
 });
 await pv.init(); // canvases in root, WebGL2; rejects without it
 
@@ -59,7 +60,11 @@ pv.destroy();
 ```
 
 - **Layers.** Fields and images draw in the order added; GeoJSON (lines,
-  fill, labels) always above them. One particles layer at a time.
+  fill, points with `radius`, labels) always above them. One particles
+  layer at a time.
+- **Views.** `goTo` onto the view already shown, and `setInset` to the
+  current inset, do nothing: construct with the first view's `preset`,
+  `rotate` and `zoom` to open on it without a morph.
 - **Time.** One playhead. The first field layer drives it through its
   months; the others follow and load their own months. Its `timeRange`, the
   same as zartigl's (`{ start?, end? }` or `{ trailing: "P6M" }`), loops

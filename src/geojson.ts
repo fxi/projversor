@@ -21,6 +21,8 @@ export interface GeoJSONStyle {
   labelColor?: string;
   /** Label css font. */
   font?: string;
+  /** Point radius, css px; d3's 4.5 by default. */
+  radius?: number;
 }
 
 /** A GeoJSON object and its style. */
@@ -33,6 +35,7 @@ export interface GeoJSONLayer {
 const DEFAULT_STYLE: Required<Omit<GeoJSONStyle, "fill" | "label">> = {
   stroke: "rgba(255, 255, 255, 0.85)",
   width: 1,
+  radius: 4.5,
   labelColor: "",
   font: '600 11px "Inter Tight Variable", system-ui, sans-serif',
 };
@@ -47,6 +50,7 @@ const STYLE_KEYS = new Set([
   "label",
   "labelColor",
   "font",
+  "radius",
 ]);
 
 const GEOJSON_TYPES = new Set([
@@ -78,8 +82,10 @@ export function parseGeoJSONLayer(value: unknown, path: string): GeoJSONLayer {
         throw new Error(`${path}.style.${key} is not a GeoJSON style key`);
       }
     }
-    if (style.width !== undefined && !(style.width > 0)) {
-      throw new Error(`${path}.style.width must be a positive number`);
+    for (const key of ["width", "radius"] as const) {
+      if (style[key] !== undefined && !(style[key] > 0)) {
+        throw new Error(`${path}.style.${key} must be a positive number`);
+      }
     }
   }
   return layer as GeoJSONLayer;
@@ -111,7 +117,7 @@ export function drawGeoJSON(
   layer: GeoJSONLayer,
 ): void {
   const style = { ...DEFAULT_STYLE, ...layer.style };
-  const path = geoPath(projection, ctx);
+  const path = geoPath(projection, ctx).pointRadius(style.radius);
   ctx.beginPath();
   path(layer.data);
   if (style.fill) {

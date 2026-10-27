@@ -143,6 +143,16 @@ export class Camera {
       );
     }
     if (preset) {
+      // Already there, at rest: a morph would only replay the same view.
+      if (
+        this.atRest(
+          preset,
+          target.rotate ?? preset.rotate,
+          target.zoom ?? preset.zoom,
+        )
+      ) {
+        return;
+      }
       this.morph(
         preset,
         target.rotate ?? preset.rotate,
@@ -177,6 +187,19 @@ export class Camera {
       target.zoom ?? (target.preset ? preset.zoom : this.view.zoom),
     );
     this.setPreset(preset);
+  }
+
+  /** No transition running and the view equals this target. */
+  private atRest(preset: Preset, rotate: Rotate, zoom: number): boolean {
+    if (this.transition || preset.id !== this.presetValue.id) {
+      return false;
+    }
+    const target = this.north ? withBearing(rotate, 0) : rotate;
+    const same = (a: number, b: number) => Math.abs(a - b) < 1e-6;
+    return (
+      this.view.rotate.every((v, i) => same(v, target[i])) &&
+      same(this.view.zoom, clampZoom(zoom))
+    );
   }
 
   private morph(
@@ -284,6 +307,14 @@ export class Camera {
    */
   setInset(inset: Inset, durationMs = VIEW_MS): void {
     const from = this.view.inset ?? NO_INSET;
+    const current = this.insetTransition?.to ?? from;
+    if (
+      (["top", "right", "bottom", "left"] as const).every(
+        (side) => current[side] === inset[side],
+      )
+    ) {
+      return;
+    }
     if (durationMs <= 0) {
       this.insetTransition = null;
       this.view.inset = { ...inset };
