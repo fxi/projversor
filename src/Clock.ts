@@ -1,3 +1,4 @@
+import { GeoVideoClock } from "@fxi/zartigl/engine";
 import type { ProjversorLayer } from "./layers";
 
 /**
@@ -13,38 +14,9 @@ const DEFAULT_SPEEDS: Record<ProjversorLayer["kind"], number> = {
   scalar: 5,
 };
 
-/** The playhead shared by the layers: time, play state and speeds. */
-export class Clock {
-  /** Playhead, epoch ms. */
-  ms = 0;
-  /** Playback held, e.g. while a timeline thumb is held. */
-  held = false;
-  /** Playback speed multiplier per layer kind. */
+/** Playback presets for the sphere's shared engine clock. */
+export class Clock extends GeoVideoClock {
   readonly speeds = { ...DEFAULT_SPEEDS };
-  private playingValue: boolean;
-
-  constructor(
-    playing: boolean,
-    private readonly onPlaying: (playing: boolean) => void,
-  ) {
-    this.playingValue = playing;
-  }
-
-  get playing(): boolean {
-    return this.playingValue;
-  }
-
-  setPlaying(playing: boolean): void {
-    if (this.playingValue !== playing) {
-      this.playingValue = playing;
-      this.onPlaying(playing);
-    }
-  }
-
-  /** Playing and not held. */
-  get advancing(): boolean {
-    return this.playingValue && !this.held;
-  }
 
   /** Set a kind's speed when it is one of that kind's {@link SPEEDS}. */
   setKindSpeed(kind: ProjversorLayer["kind"], speed?: number): void {

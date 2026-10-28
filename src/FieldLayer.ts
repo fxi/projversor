@@ -830,15 +830,17 @@ export class FieldLayer {
     }
     const first = times[0];
     const lastTime = times[times.length - 1];
-    const stepMs = (lastTime - first) / (times.length - 1);
-    this.clock.ms += dt * STEPS_PER_SECOND * this.speed * stepMs;
     // The month ends early when the time window does.
     const bounds = this.rangeBounds;
     const end = bounds ? Math.min(lastTime, bounds[1]) : lastTime;
+    const ended = this.clock.advance(dt, times, STEPS_PER_SECOND * this.speed, [
+      bounds ? Math.max(first, bounds[0]) : first,
+      end,
+    ]);
     if (this.clock.ms - first > PREFETCH_AT * (end - first)) {
       this.prefetchNext();
     }
-    if (this.clock.ms > end) {
+    if (ended) {
       const next = nextMonth(this.chunksValue, this.chunkIndexValue, bounds);
       const upcoming = this.upcoming;
       if (!next || next.index === this.chunkIndexValue) {
