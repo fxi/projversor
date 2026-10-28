@@ -9,5 +9,7 @@ in float v_bright;
 out vec4 o_color;
 
 void main() {
-    o_color = vec4(texture(u_ramp, vec2(v_color, 0.5)).rgb * v_bright, u_opacity);
+    // Ramp alpha (alphaFade) hides slow or fast particles too.
+    vec4 ramp = texture(u_ramp, vec2(v_color, 0.5));
+    o_color = vec4(ramp.rgb * v_bright, ramp.a * u_opacity);
 }

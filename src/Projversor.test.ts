@@ -281,7 +281,7 @@ describe("Projversor", () => {
     const pv = new Projversor(fakeRoot().root, { interactive: false });
     await pv.init();
     const statuses: { id: string; text: string }[] = [];
-    const palettes: { id: string; palette: string }[] = [];
+    const palettes: { id: string; palette: string; ramp: unknown }[] = [];
     pv.on("status", (s) => statuses.push(s));
     pv.on("palette", (p) => palettes.push(p));
     const wind = await added(pv, "wind", "particles", "surface-wind", WIND);
@@ -291,6 +291,7 @@ describe("Projversor", () => {
     expect(palettes[palettes.length - 1]).toEqual({
       id: "wind",
       palette: "viridis",
+      ramp: { reverse: false, alphaFade: { low: 0, high: 0, curve: "linear" } },
     });
   });
 

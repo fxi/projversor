@@ -21,6 +21,7 @@ import {
   type GeoJSONStyle,
 } from "./geojson";
 import { findLayer, type ProjversorLayer } from "./layers";
+import type { RampOptions } from "./scales";
 import { parseOverlayColors, type OverlayColors } from "./Overlay";
 import {
   SphereImage,
@@ -127,7 +128,8 @@ export interface ProjversorEvents extends StageEvents {
   status: { id: string; text: string };
   /** A month of a layer was decoded and is displayed. */
   month: { id: string; month: ProjversorMonth };
-  palette: { id: string; palette: string };
+  /** `ramp`: how it is drawn, reversed and faded; pass it to `rampGradient`. */
+  palette: { id: string; palette: string; ramp: RampOptions };
 }
 
 /** The view controls of a projversor. */
@@ -171,6 +173,11 @@ export class FieldLayerHandle {
 
   get palette(): string {
     return this.field.palette;
+  }
+
+  /** How the palette is drawn, reversed and faded: pass it to `rampGradient`. */
+  get rampOptions(): RampOptions {
+    return this.field.rampOptions;
   }
 
   /** Scalar entry id coloring the particles, or null. */
@@ -652,7 +659,10 @@ export class Projversor {
     } else if (type === "month") {
       this.events.emit("month", { id, month: detail as ProjversorMonth });
     } else if (type === "palette") {
-      this.events.emit("palette", { id, palette: detail as string });
+      this.events.emit("palette", {
+        id,
+        ...(detail as FieldLayerEvents["palette"]),
+      });
     }
   }
 

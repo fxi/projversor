@@ -187,12 +187,14 @@ export class GeoVideoField {
     program.float(names.mix, this.pair[2]);
     program.vec4(names.bounds, this.bounds);
     if (this.mask && this.manifest.encoding.kind === "scalar-luma") {
-      const { codeRange, valueRange } = geoVideoScalarUniforms(
+      const { codeRange, valueRange, transfer } = geoVideoScalarUniforms(
         this.manifest.encoding,
       );
       program.texture("u_tint_mask", unit + 2, this.mask);
       program.vec2("u_code_range", ...codeRange);
       program.vec2("u_value_range", ...valueRange);
+      // Log-scaled archives store codes at log10(1 + 9t).
+      program.float("u_scalar_transfer", transfer);
     }
     return true;
   }

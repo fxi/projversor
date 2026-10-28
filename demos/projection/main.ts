@@ -190,9 +190,9 @@ class ProjectionDemo {
       }
       this.buildLegend(month);
     });
-    p.on("palette", ({ palette }) => {
+    p.on("palette", ({ palette, ramp }) => {
       this.ui.palette.value = palette;
-      this.ui.ramp.style.background = rampGradient(palette);
+      this.ui.ramp.style.background = rampGradient(palette, ramp);
     });
     p.on("playing", (playing) => this.setPlaying(playing));
     p.on("preset", (preset) => {

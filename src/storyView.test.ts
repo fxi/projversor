@@ -96,6 +96,19 @@ describe("parseProjversorView", () => {
     ).toThrow("views.probe.config.style.particles.backdrop must be");
   });
 
+  it("accepts alpha fades and reads legacy palettes as their replacement", () => {
+    const config = parseProjversorView(
+      view({ style: { reversePalette: true, raster: { alphaFadeLow: 0.2 } } }),
+    );
+    expect(config.style).toEqual({
+      reversePalette: true,
+      raster: { alphaFadeLow: 0.2 },
+    });
+    expect(
+      parseProjversorView(view({ style: { palette: "heat-alert" } })).style,
+    ).toEqual({ palette: "heat", raster: { alphaFadeLow: 0.25 } });
+  });
+
   it("rejects style keys projversor does not render", () => {
     expect(() =>
       parseProjversorView(view({ style: { renderMode: "raster" } })),

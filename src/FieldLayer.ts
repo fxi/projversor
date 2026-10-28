@@ -1,5 +1,6 @@
 import {
   mergeStyles,
+  migrateLegacyStyle,
   parseLayerStyle,
   requireCatalogEntry,
   resolveEntryStyle,
@@ -22,6 +23,7 @@ import {
   nextChunk,
   pairChunk,
   timeRangeBounds,
+  type AlphaFade,
   type ColorGrade,
   type TimeRange,
 } from "@fxi/zartigl/engine";
@@ -35,7 +37,7 @@ import {
   loadTintChunks,
   type ProjversorLayer,
 } from "./layers";
-import { particleCount, particleSpeedFactor } from "./scales";
+import { particleCount, particleSpeedFactor, type RampOptions } from "./scales";
 import {
   visibleCap,
   type ParticleStyle,
@@ -64,7 +66,13 @@ const SETTLE_FRAMES_MAX = 120;
 export const STYLE_SUPPORT = {
   palette: true,
   particles: ["density", "speed", "fade", "grade", "backdrop"],
-  raster: ["opacity", "vibrance"],
+  raster: [
+    "opacity",
+    "vibrance",
+    "alphaFadeLow",
+    "alphaFadeHigh",
+    "alphaFadeCurve",
+  ],
 } as const;
 
 /** Validate a style against what projversor renders for `layer`. */
@@ -133,7 +141,7 @@ export interface FieldLayerEvents {
   layer: ProjversorLayer;
   /** A month was decoded and is displayed. */
   month: ProjversorMonth;
-  palette: string;
+  palette: { palette: string; ramp: RampOptions };
 }
 
 /** What a field layer needs from its owner. */
@@ -160,6 +168,11 @@ export class FieldLayer {
   private settle = 0;
   private paletteId = "";
   private ramp: WebGLTexture | null = null;
+  /** How the palette becomes the ramp: reversed, faded at its ends. */
+  private rampOptionsValue: { reverse: boolean; alphaFade: AlphaFade } = {
+    reverse: false,
+    alphaFade: {},
+  };
   private gradeValue: ColorGrade = COLOR_GRADE_OFF;
   private layerValue: ProjversorLayer = PROJVERSOR_LAYERS[0];
   private openedValue = false;
@@ -223,6 +236,11 @@ export class FieldLayer {
 
   get palette(): string {
     return this.paletteId;
+  }
+
+  /** How the palette is drawn: reversed, faded at its ends (for legends). */
+  get rampOptions(): { reverse: boolean; alphaFade: AlphaFade } {
+    return this.rampOptionsValue;
   }
 
   get grade(): ColorGrade {
@@ -621,7 +639,7 @@ export class FieldLayer {
    */
   restyle(viewStyle?: LayerStyleInput): void {
     if (viewStyle !== undefined) {
-      this.viewStyleValue = viewStyle;
+      this.viewStyleValue = migrateLegacyStyle(viewStyle);
     }
     const layer = this.layerValue;
     const entry = requireCatalogEntry(layer.entryId);
@@ -634,6 +652,20 @@ export class FieldLayer {
     // Paused particles redraw their trails with the new style.
     this.settle = this.settleFrames();
     this.gradeValue = gradeToColorGrade(style.particles.grade);
+    const rampOptions = {
+      reverse: style.reversePalette,
+      alphaFade: {
+        low: style.raster.alphaFadeLow,
+        high: style.raster.alphaFadeHigh,
+        curve: style.raster.alphaFadeCurve,
+      },
+    };
+    if (JSON.stringify(rampOptions) !== JSON.stringify(this.rampOptionsValue)) {
+      this.rampOptionsValue = rampOptions;
+      if (this.ramp) {
+        this.applyPalette(this.paletteId);
+      }
+    }
   }
 
   /** The view style's palette when the layer offers it, else its own. */
@@ -665,9 +697,9 @@ export class FieldLayer {
       this.gl.deleteTexture(this.ramp);
     }
     this.paletteId = id;
-    this.ramp = createColorRampTexture(this.gl, id);
+    this.ramp = createColorRampTexture(this.gl, id, this.rampOptionsValue);
     this.settle = this.settleFrames();
-    this.host.emit("palette", id);
+    this.host.emit("palette", { palette: id, ramp: this.rampOptionsValue });
   }
 
   /** Playback speed multiplier of the open layer's kind. */

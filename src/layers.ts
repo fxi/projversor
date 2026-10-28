@@ -75,6 +75,15 @@ const TINTED: Record<string, LayerLook[]> = {
       tint: "f0812aa5-f9b6-4149-ab51-3de9d9d100c3", // med-sea-water-temperature
     },
   ],
+  "surface-wind": [
+    {
+      id: "surface-wind-temperature",
+      label: "Wind × Air Temperature",
+      style: { palette: "thermal-alt" },
+      // CAMS 2 m temperature, from 2026: earlier months color by speed.
+      tint: "b45b2598-c7c1-4367-a3c2-4acb9b31deba", // air-temperature-2m
+    },
+  ],
 };
 
 /** Particle palette of vector entries without a style. */

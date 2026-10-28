@@ -1,13 +1,24 @@
-import { formatUnit, resolveColorRamp } from "@fxi/zartigl/engine";
+import {
+  formatUnit,
+  resolveColorRamp,
+  type AlphaFade,
+} from "@fxi/zartigl/engine";
+
+/** How a palette is drawn: reversed, faded at its ends (`Projversor.rampOptions`). */
+export interface RampOptions {
+  reverse?: boolean;
+  alphaFade?: AlphaFade;
+}
 
 /**
- * Css gradient of a palette, bottom to top. Stops are sorted numerically:
- * integer-like keys ("0", "1") would otherwise enumerate first and scramble
- * the gradient. A palette with transparent stops (#rrggbbaa) gets a
- * checkerboard layer underneath, so the faded part reads as see-through.
+ * Css gradient of a palette, bottom to top, drawn as the field draws it.
+ * Stops are sorted numerically: integer-like keys ("0", "1") would otherwise
+ * enumerate first and scramble the gradient. A ramp with transparent stops
+ * (#rrggbbaa) gets a checkerboard layer underneath, so the faded part reads
+ * as see-through.
  */
-export function rampGradient(palette: string): string {
-  const colors = Object.entries(resolveColorRamp(palette))
+export function rampGradient(palette: string, options?: RampOptions): string {
+  const colors = Object.entries(resolveColorRamp(palette, options))
     .map(([stop, color]) => [Number(stop), color] as const)
     .sort((a, b) => a[0] - b[0]);
   const stops = colors.map(([stop, color]) => `${color} ${stop * 100}%`);

@@ -31,6 +31,15 @@ describe("rampGradient", () => {
       /^linear-gradient\(to top, #fde72500 0%.*\), repeating-conic-gradient/,
     );
   });
+
+  it("draws the ramp reversed and faded as the field does", () => {
+    const faded = rampGradient("heat", {
+      reverse: true,
+      alphaFade: { low: 0.5 },
+    });
+    expect(faded).toMatch(/^linear-gradient\(to top, #3a000700 0%/);
+    expect(faded).toContain("repeating-conic-gradient");
+  });
 });
 
 describe("legendTicks", () => {

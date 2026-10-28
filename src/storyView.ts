@@ -187,14 +187,16 @@ export function parseProjversorView(
       );
     }
   }
+  let style: LayerStyleInput | undefined;
   if (config.style !== undefined) {
-    const style = parseLayerStyle(config.style, `${path}.style`, {
+    style = parseLayerStyle(config.style, `${path}.style`, {
       kind: layer.kind,
       supports: STYLE_SUPPORT,
     });
+    const palette = style.palette;
     invariant(
-      style.palette === undefined ||
-        layerPalettes(layer).some((p) => p.id === style.palette),
+      palette === undefined ||
+        layerPalettes(layer).some((p) => p.id === palette),
       `${path}.style.palette is not offered for this layer`,
     );
   }
@@ -238,7 +240,10 @@ export function parseProjversorView(
   if (config.geojson !== undefined) {
     parseGeoJSONLayer(config.geojson, `${path}.geojson`);
   }
-  return config as unknown as ProjversorViewConfig;
+  // The parsed style: legacy palettes read as their replacement (heat-alert).
+  return (style
+    ? { ...config, style }
+    : config) as unknown as ProjversorViewConfig;
 }
 
 /**

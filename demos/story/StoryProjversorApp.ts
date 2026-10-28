@@ -258,8 +258,11 @@ export class StoryProjversorApp {
       }
       this.renderLegend(month);
     });
-    p.on("palette", ({ palette }) =>
-      this.ui.legendRamp.style.setProperty("--ramp", rampGradient(palette)),
+    p.on("palette", ({ palette, ramp }) =>
+      this.ui.legendRamp.style.setProperty(
+        "--ramp",
+        rampGradient(palette, ramp),
+      ),
     );
     p.on("frame", () => this.onFrame());
     this.ui.north.setAttribute("aria-label", this.labels.north);
