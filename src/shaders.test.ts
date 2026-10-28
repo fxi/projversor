@@ -21,6 +21,20 @@ describe("projversor advection randomness", () => {
   });
 });
 
+describe("shared velocity blending", () => {
+  it("uses zartigl's physical velocity blend for advection and speed color", () => {
+    for (const shader of [advectFrag, drawVert]) {
+      expect(shader).not.toContain("/// @zartigl");
+      expect(shader).toContain(
+        "vec3 blendVelocity(vec3 a, vec3 b, float fraction)",
+      );
+      expect(shader).toContain(
+        "blendVelocity(texture(u_vel0, uv).xyz, texture(u_vel1, uv).xyz, u_vel_mix)",
+      );
+    }
+  });
+});
+
 describe("projversor grids", () => {
   it("samples regional grids only inside their bounds", () => {
     for (const shader of [advectFrag, rasterFrag]) {

@@ -1,6 +1,7 @@
 import {
   COLOR_GRADE_GLSL,
   GEOVIDEO_SCALAR_GLSL,
+  VELOCITY_BLEND_GLSL,
   RANDOM_GLSL,
   VIBRANCE_GLSL,
 } from "@fxi/zartigl/engine";
@@ -9,6 +10,7 @@ import {
 const CHUNKS: Record<string, string> = {
   COLOR_GRADE_GLSL,
   GEOVIDEO_SCALAR_GLSL,
+  VELOCITY_BLEND_GLSL,
   RANDOM_GLSL,
   VIBRANCE_GLSL,
 };

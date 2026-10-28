@@ -3,6 +3,7 @@
 // textures are consecutive time steps blended by u_vel_mix.
 
 #include ./grid.glsl;
+/// @zartigl VELOCITY_BLEND_GLSL
 
 uniform sampler2D u_vel0;
 uniform sampler2D u_vel1;
@@ -13,7 +14,7 @@ uniform vec4 u_bounds;    // west, south, east, north in degrees
 vec3 sampleVelocity(vec3 g) {
     vec2 uv = geoUv(g, u_bounds);
     if (!onGrid(uv, u_bounds)) return vec3(0.0);
-    return mix(texture(u_vel0, uv).xyz, texture(u_vel1, uv).xyz, u_vel_mix);
+    return blendVelocity(texture(u_vel0, uv).xyz, texture(u_vel1, uv).xyz, u_vel_mix);
 }
 
 /**
