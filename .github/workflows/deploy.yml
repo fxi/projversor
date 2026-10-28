@@ -1,4 +1,4 @@
-name: Deploy demos to GitHub Pages
+name: Deploy apps to GitHub Pages
 
 on:
   push:
@@ -27,14 +27,14 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       # Bases match https://<owner>.github.io/projversor/: the explorer at
-      # the root, the other demos in their folders.
-      - run: npm run build:demos
+      # the root, the other apps in their folders.
+      - run: npm run build:apps
       - run: |
           mkdir -p dist-pages
-          cp -R dist-projection/. dist-pages/
-          for demo in story site minimal; do
-            mkdir -p "dist-pages/$demo"
-            cp -R "dist-$demo/." "dist-pages/$demo/"
+          cp -R dist-apps/explorer/. dist-pages/
+          for app in story site minimal; do
+            mkdir -p "dist-pages/$app"
+            cp -R "dist-apps/$app/." "dist-pages/$app/"
           done
       - uses: actions/upload-pages-artifact@v3
         with:

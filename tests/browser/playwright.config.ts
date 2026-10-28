@@ -2,9 +2,9 @@ import { defineConfig } from "@playwright/test";
 
 export const HARNESS_PORT = 5180;
 
-/** The demos, each on its own Vite dev server. */
+/** The apps, each on its own Vite dev server. */
 export const DEMOS = {
-  projection: { port: 5181, path: "/projversor/" },
+  explorer: { port: 5181, path: "/projversor/" },
   story: { port: 5182, path: "/projversor/story/" },
   site: { port: 5183, path: "/" },
   minimal: { port: 5184, path: "/projversor/minimal/" },
@@ -50,7 +50,7 @@ export default defineConfig({
       reuseExistingServer: false,
     },
     ...(Object.keys(DEMOS) as (keyof typeof DEMOS)[]).map((name) => ({
-      command: `npx vite --config vite.config.${name}.ts --port ${DEMOS[name].port} --strictPort`,
+      command: `npx vite --config apps/${name}/vite.config.ts --port ${DEMOS[name].port} --strictPort`,
       cwd: "../..",
       url: demoUrl(name),
       reuseExistingServer: false,

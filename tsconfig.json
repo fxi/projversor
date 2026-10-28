@@ -13,6 +13,6 @@
     "isolatedModules": true,
     "noEmit": true
   },
-  "include": ["src", "demos"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src", "apps"],
+  "exclude": ["node_modules", "dist", "apps/*/vite.config.ts"]
 }

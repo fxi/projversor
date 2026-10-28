@@ -21,7 +21,7 @@ const LOAD = { timeout: 60_000 };
 
 test("projection explorer opens a layer", async ({ page }) => {
   const errors = collectErrors(page);
-  await page.goto(demoUrl("projection"));
+  await page.goto(demoUrl("explorer"));
   await expect(page.locator('[data-projversor="gl"]')).toHaveCount(1);
   // The month picker fills once the layer shows.
   await expect(page.locator('[data-ref="month"] option').first()).toBeAttached(

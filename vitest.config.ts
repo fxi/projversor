@@ -5,6 +5,6 @@ export default defineConfig({
   plugins: [glsl()],
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts", "demos/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "apps/**/*.test.ts"],
   },
 });

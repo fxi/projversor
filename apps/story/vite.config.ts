@@ -4,7 +4,7 @@ import { defineConfig } from "vite";
 
 // Projversor story: scenes morphing one projversor sphere, plus its layout
 // contact sheet (sheet.html).
-const root = resolve(import.meta.dirname, "demos/story");
+const root = import.meta.dirname;
 
 export default defineConfig({
   plugins: [glsl()],
@@ -12,7 +12,7 @@ export default defineConfig({
   root,
   publicDir: false,
   build: {
-    outDir: "../../dist-story",
+    outDir: resolve(root, "../../dist-apps/story"),
     emptyOutDir: true,
     rollupOptions: {
       input: {

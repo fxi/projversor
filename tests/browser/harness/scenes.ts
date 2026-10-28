@@ -1,5 +1,5 @@
 import type { GeoJSONLayerConfig } from "../../../src";
-import storyViews from "../../../demos/story/views.json" with { type: "json" };
+import storyViews from "../../../apps/story/views.json" with { type: "json" };
 
 /** The Niño regions of the story El Niño scene, as published. */
 const NINO = storyViews.views.find((v) => v.id === "pacific-anomaly")!.config

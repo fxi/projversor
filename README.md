@@ -96,18 +96,19 @@ npm install
 npm test                # unit tests
 npm run quality         # prettier, eslint, tsc
 npm run build:lib       # dist/: the published package
-npm run test:browser    # reference renders and demo smoke tests
-npm run dev:minimal     # also dev:projection, dev:story, dev:site
+npm run test:browser    # reference renders and app smoke tests
+npm run dev:explorer    # also dev:story, dev:site, dev:minimal
 ```
 
-Demos: `demos/minimal` (sea surface temperature anomaly and the Niño
-regions, the smallest page), `demos/projection` (explorer), `demos/story` (a
-story) and `demos/site` (home page with a scroll story). `npm run dev:minimal` and the
-like serve each one; `npm run build:demos` builds them all.
+Apps: `apps/explorer` (every catalog layer on the sphere), `apps/story` (a
+story), `apps/site` (home page with a scroll story) and `apps/minimal` (sea
+surface temperature anomaly and the Niño regions, the smallest page).
+`npm run dev:explorer` and the like serve each one; `npm run build:apps`
+builds them all into `dist-apps/<name>/`.
 
 ## Docker
 
-The image serves the demos with nginx on port 8080: the explorer at `/`,
+The image serves the apps with nginx on port 8080: the explorer at `/`,
 the story at `/story/`, the site at `/site/` and the minimal page at
 `/minimal/` (`/healthz` for health checks).
 
@@ -119,7 +120,7 @@ docker compose pull && docker compose up -d   # the published image
 CI publishes `ghcr.io/fxi/projversor` from `main` (`latest`) and from `v*`
 tags.
 
-The same demos are published to GitHub Pages from `main`
+The same apps are published to GitHub Pages from `main`
 (`https://fxi.github.io/projversor/`, `story/`, `site/`, `minimal/`).
 
 ## Releases
@@ -130,4 +131,4 @@ npm run release:minor   # or release:patch, release:major
 
 `npm version` bumps `package.json`, commits and tags `vX.Y.Z`, then the
 script pushes `main` with the tag. The tag publishes the package to npm
-(`publish.yml`, after quality, tests and `build:lib`) and the demo image.
+(`publish.yml`, after quality, tests and `build:lib`) and the app image.

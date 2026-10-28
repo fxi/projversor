@@ -19,5 +19,5 @@ npm ci --ignore-scripts --no-audit --no-fund
 npm run quality
 npm test
 npm run build:lib
-npm run build:demos
+npm run build:apps
 echo "preflight: ok"

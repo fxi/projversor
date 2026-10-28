@@ -6,10 +6,10 @@ proves the architecture before moving to its own repository.
 
 ```bash
 npm run dev:site     # http://localhost:5173/
-npm run build:site   # dist-site/: index.html, assets/, content/
+npm run build:apps   # dist-apps/site/: index.html, assets/, content/
 ```
 
-Like the other demos, it uses the `Projversor` API (`../../src`) and
+Like the other apps, it uses the `Projversor` API (`../../src`) and
 reaches zartigl only through its package entries (`@fxi/zartigl/story`).
 
 ## Content

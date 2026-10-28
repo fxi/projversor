@@ -1,14 +1,15 @@
+import { resolve } from "node:path";
 import glsl from "vite-plugin-glsl";
 import { defineConfig } from "vite";
 
-// Standalone projection demo: GeoVideo currents on a reprojectable sphere.
+// Projversor explorer: every GeoVideo archive on a reprojectable sphere.
 export default defineConfig({
   plugins: [glsl()],
   base: "/projversor/",
-  root: "demos/projection",
+  root: import.meta.dirname,
   publicDir: false,
   build: {
-    outDir: "../../dist-projection",
+    outDir: resolve(import.meta.dirname, "../../dist-apps/explorer"),
     emptyOutDir: true,
   },
 });

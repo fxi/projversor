@@ -7,7 +7,7 @@ and the data playback, and the story loops.
 
 ```bash
 npm run dev:story     # vite dev server: index.html and sheet.html
-npm run build:demos   # dist-story/, served under /projversor/story/
+npm run build:apps    # dist-apps/story/, served under /projversor/story/
 ```
 
 The app uses the `Projversor` API (`../../src`) for the renderer and

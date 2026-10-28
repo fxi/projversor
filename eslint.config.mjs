@@ -5,11 +5,16 @@ import style from "./quality/style.config.mjs";
 export default [
   ...style,
   {
-    files: ["src/**/*.ts", "demos/**/*.ts"],
+    files: ["src/**/*.ts", "apps/**/*.ts"],
     languageOptions: { globals: globals.browser },
   },
   {
-    files: ["*.{js,mjs,ts}", "quality/**/*.mjs", "tests/**/*.ts"],
+    files: [
+      "*.{js,mjs,ts}",
+      "apps/*/vite.config.ts",
+      "quality/**/*.mjs",
+      "tests/**/*.ts",
+    ],
     languageOptions: { globals: globals.nodeBuiltin },
   },
 ];

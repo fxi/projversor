@@ -1,6 +1,6 @@
-# projversor
+# projversor explorer
 
-Standalone demo: every GeoVideo archive of the zartigl catalog, global or
+The main app: every GeoVideo archive of the zartigl catalog, global or
 regional (Mediterranean), on a sphere that morphs between world projections.
 Vector archives (currents, wind, waves, sea ice) play as animated particles,
 scalar ones (temperature, salinity, biogeochemistry, …) as a raster.
@@ -12,8 +12,8 @@ story on the same renderer. zartigl is reached through its package entries
 only (`@fxi/zartigl/engine`, `/catalog`, `/story`).
 
 ```bash
-npm run dev:projection   # vite dev server
-npm run build:demos      # dist-projection/, dist-story/, dist-site/
+npm run dev:explorer   # vite dev server
+npm run build:apps     # dist-apps/explorer/ and the other apps
 ```
 
 ## Technique
@@ -62,7 +62,7 @@ File names below are in `src/` unless noted.
   currents with sea water temperature from the same Copernicus model,
   globally and in the Mediterranean.
 - **North up by default.** As d3-geo-zoom's `northUp`, drags keep the roll
-  (gamma) at zero. The compass (this demo's `Compass.ts`, with `bearing.ts`) shows the
+  (gamma) at zero. The compass (this app's `Compass.ts`, with `bearing.ts`) shows the
   bearing; dragging around it or the arrow keys free and set the bearing,
   and a click eases back to north up and locks it again.
 - **Timeline as a jog wheel.** Scrubbing cancels stale decodes, and the
@@ -90,7 +90,7 @@ File names below are in `src/` unless noted.
 
 ## New here
 
-These parts are specific to this demo and independent of Maplibre:
+These parts are specific to this app and independent of Maplibre:
 
 - the blended projections in d3 and GLSL;
 - the sphere-space particle state and scalar raster mesh, projected with any
