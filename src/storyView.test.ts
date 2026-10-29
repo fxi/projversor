@@ -109,6 +109,15 @@ describe("parseProjversorView", () => {
     ).toEqual({ palette: "heat", raster: { alphaFadeLow: 0.25 } });
   });
 
+  it("accepts the particle glow and checks its range", () => {
+    expect(
+      parseProjversorView(view({ style: { particles: { glow: 0.5 } } })).style,
+    ).toEqual({ particles: { glow: 0.5 } });
+    expect(() =>
+      parseProjversorView(view({ style: { particles: { glow: 2 } } })),
+    ).toThrow("views.probe.config.style.particles.glow must be");
+  });
+
   it("rejects style keys projversor does not render", () => {
     expect(() =>
       parseProjversorView(view({ style: { renderMode: "raster" } })),

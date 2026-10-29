@@ -3,6 +3,7 @@ import { withZartiglChunks } from "./glsl";
 import advectSource from "./shaders/advect.frag.glsl";
 import backdropSource from "./shaders/backdrop.frag.glsl";
 import compositeSource from "./shaders/composite.frag.glsl";
+import glowSource from "./shaders/glow.frag.glsl";
 import drawSource from "./shaders/draw.vert.glsl";
 import rasterSource from "./shaders/raster.frag.glsl";
 import rasterVert from "./shaders/raster.vert.glsl";
@@ -73,5 +74,30 @@ describe("projversor grids", () => {
 
   it("drops raster triangles across a projection cut", () => {
     expect(rasterVert).toContain("longest < u_max_jump");
+  });
+});
+
+describe("particle glow", () => {
+  const glowFrag = withZartiglChunks(glowSource);
+
+  it("gathers the trails and adds the halo with zartigl's chunk", () => {
+    for (const shader of [glowFrag, compositeFrag]) {
+      expect(shader).not.toContain("/// @zartigl");
+      expect(shader).toContain(
+        "vec4 glowGather(sampler2D trails, ivec2 texel)",
+      );
+    }
+    expect(glowFrag).toContain(
+      "o_color = glowGather(u_screen, ivec2(gl_FragCoord.xy))",
+    );
+    expect(compositeFrag).toContain(
+      "color = addGlow(color, u_glow_tex, v_uv, u_glow)",
+    );
+  });
+
+  it("adds the glow before the color grade, as zartigl's composite", () => {
+    expect(compositeFrag.indexOf("addGlow(color")).toBeLessThan(
+      compositeFrag.indexOf("gradeColor(color.rgb"),
+    );
   });
 });

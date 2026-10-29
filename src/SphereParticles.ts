@@ -1,4 +1,9 @@
-import { colorGradeVec4, type ColorGrade } from "@fxi/zartigl/engine";
+import {
+  GLOW_GAIN,
+  GLOW_SCALE,
+  colorGradeVec4,
+  type ColorGrade,
+} from "@fxi/zartigl/engine";
 import type { GeoVideoField } from "./GeoVideoField";
 import { withZartiglChunks } from "./glsl";
 import advectFrag from "./shaders/advect.frag.glsl";
@@ -6,6 +11,7 @@ import compositeFrag from "./shaders/composite.frag.glsl";
 import drawFrag from "./shaders/draw.frag.glsl";
 import drawVert from "./shaders/draw.vert.glsl";
 import fadeFrag from "./shaders/fade.frag.glsl";
+import glowFrag from "./shaders/glow.frag.glsl";
 import quadVert from "./shaders/quad.vert.glsl";
 import { Program, compositeBlend, viewArea, type ViewFrame } from "./view";
 
@@ -38,10 +44,13 @@ export class SphereParticles {
   private readonly draw: Program;
   private readonly fade: Program;
   private readonly composite: Program;
+  private readonly glow: Program;
   private readonly states: WebGLTexture[];
   private readonly framebuffer: WebGLFramebuffer;
   private readonly vao: WebGLVertexArrayObject;
   private screens: WebGLTexture[] = [];
+  /** The trails gathered GLOW_SCALE× smaller, for the glow; with the screens. */
+  private glowTexture: WebGLTexture | null = null;
   private width = 0;
   private height = 0;
   private current = 0;
@@ -64,6 +73,7 @@ export class SphereParticles {
       quadVert,
       withZartiglChunks(compositeFrag),
     );
+    this.glow = new Program(gl, quadVert, withZartiglChunks(glowFrag));
     this.states = [
       this.texture(gl.RGBA32F, size, size),
       this.texture(gl.RGBA32F, size, size),
@@ -82,12 +92,20 @@ export class SphereParticles {
     for (const texture of this.screens) {
       gl.deleteTexture(texture);
     }
+    gl.deleteTexture(this.glowTexture);
     this.width = width;
     this.height = height;
     this.screens = [
       this.texture(gl.RGBA8, width, height),
       this.texture(gl.RGBA8, width, height),
     ];
+    // Linear: the composite upsamples it with bilinear taps.
+    this.glowTexture = this.texture(
+      gl.RGBA8,
+      Math.ceil(width / GLOW_SCALE),
+      Math.ceil(height / GLOW_SCALE),
+      gl.LINEAR,
+    );
     this.clear();
   }
 
@@ -210,12 +228,20 @@ export class SphereParticles {
     this.screens = [next, previous];
   }
 
-  /** Composite the trails, color graded, over the bound canvas framebuffer. */
-  present(grade: ColorGrade): void {
+  /**
+   * Composite the trails over the bound canvas framebuffer: with a halo of
+   * their own color at `glow` (0–1, zartigl's glow style key), then color
+   * graded.
+   */
+  present(grade: ColorGrade, glow = 0): void {
     const gl = this.gl;
+    const halo = glow > 0 ? this.gatherGlow() : null;
     gl.viewport(0, 0, this.width, this.height);
     const c = this.composite.use();
     c.texture("u_screen", 0, this.screens[0]);
+    // Off, the sampler still wants a texture on its unit.
+    c.texture("u_glow_tex", 1, halo ?? this.screens[0]);
+    c.float("u_glow", halo ? GLOW_GAIN * glow : 0);
     c.float("u_grade_on", grade.enabled ? 1 : 0);
     c.vec4("u_grade", colorGradeVec4(grade));
     gl.enable(gl.BLEND);
@@ -224,15 +250,45 @@ export class SphereParticles {
     gl.disable(gl.BLEND);
   }
 
+  /**
+   * Gather the trails into the glow texture (zartigl's glowGather), then
+   * give the canvas framebuffer back.
+   */
+  private gatherGlow(): WebGLTexture | null {
+    const gl = this.gl;
+    const texture = this.glowTexture;
+    if (!texture) {
+      return null;
+    }
+    const canvas = gl.getParameter(
+      gl.FRAMEBUFFER_BINDING,
+    ) as WebGLFramebuffer | null;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
+    this.target(texture);
+    gl.viewport(
+      0,
+      0,
+      Math.ceil(this.width / GLOW_SCALE),
+      Math.ceil(this.height / GLOW_SCALE),
+    );
+    gl.disable(gl.BLEND);
+    this.glow.use().texture("u_screen", 0, this.screens[0]);
+    this.quad();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, canvas);
+    return texture;
+  }
+
   destroy(): void {
     const gl = this.gl;
     this.advect.delete();
     this.draw.delete();
     this.fade.delete();
     this.composite.delete();
+    this.glow.delete();
     for (const texture of [...this.states, ...this.screens]) {
       gl.deleteTexture(texture);
     }
+    gl.deleteTexture(this.glowTexture);
     gl.deleteFramebuffer(this.framebuffer);
     gl.deleteVertexArray(this.vao);
   }
@@ -256,13 +312,18 @@ export class SphereParticles {
     gl.bindVertexArray(null);
   }
 
-  private texture(format: number, width: number, height: number) {
+  private texture(
+    format: number,
+    width: number,
+    height: number,
+    filter: number = this.gl.NEAREST,
+  ) {
     const gl = this.gl;
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texStorage2D(gl.TEXTURE_2D, 1, format, width, height);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.bindTexture(gl.TEXTURE_2D, null);

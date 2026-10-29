@@ -65,7 +65,7 @@ const SETTLE_FRAMES_MAX = 120;
 /** Style keys projversor renders. */
 export const STYLE_SUPPORT = {
   palette: true,
-  particles: ["density", "speed", "fade", "grade", "backdrop"],
+  particles: ["density", "speed", "fade", "grade", "backdrop", "glow"],
   raster: [
     "opacity",
     "vibrance",
@@ -795,7 +795,7 @@ export class FieldLayer {
     if (this.backdrop[3] > 0) {
       this.raster.drawBackdrop(frame, field, ms, this.backdrop);
     }
-    this.particles.present(this.gradeValue);
+    this.particles.present(this.gradeValue, this.particleSettings.glow);
   }
 
   /** zartigl's drop-rate boost, from the per-frame zoom and center change. */
