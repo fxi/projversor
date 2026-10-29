@@ -56,7 +56,11 @@ export class SphereScalar {
 
   constructor(private readonly gl: WebGL2RenderingContext) {
     this.program = new Program(gl, rasterVert, withZartiglChunks(rasterFrag));
-    this.backdrop = new Program(gl, rasterVert, backdropFrag);
+    this.backdrop = new Program(
+      gl,
+      rasterVert,
+      withZartiglChunks(backdropFrag),
+    );
     // Attribute-less draws still want a bound vertex array.
     this.vao = gl.createVertexArray();
   }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { withZartiglChunks } from "./glsl";
 import advectSource from "./shaders/advect.frag.glsl";
+import backdropSource from "./shaders/backdrop.frag.glsl";
 import compositeSource from "./shaders/composite.frag.glsl";
 import drawSource from "./shaders/draw.vert.glsl";
 import rasterSource from "./shaders/raster.frag.glsl";
@@ -8,6 +9,7 @@ import rasterVert from "./shaders/raster.vert.glsl";
 
 // The shaders as compiled: zartigl chunks inserted.
 const advectFrag = withZartiglChunks(advectSource);
+const backdropFrag = withZartiglChunks(backdropSource);
 const compositeFrag = withZartiglChunks(compositeSource);
 const drawVert = withZartiglChunks(drawSource);
 const rasterFrag = withZartiglChunks(rasterSource);
@@ -22,8 +24,8 @@ describe("projversor advection randomness", () => {
 });
 
 describe("shared velocity blending", () => {
-  it("uses zartigl's physical velocity blend for advection and speed color", () => {
-    for (const shader of [advectFrag, drawVert]) {
+  it("uses zartigl's physical velocity blend for advection, speed color and the backdrop", () => {
+    for (const shader of [advectFrag, drawVert, backdropFrag]) {
       expect(shader).not.toContain("/// @zartigl");
       expect(shader).toContain(
         "vec3 blendVelocity(vec3 a, vec3 b, float fraction)",
