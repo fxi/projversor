@@ -1,6 +1,6 @@
 {
   "name": "@fxi/projversor",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "GeoVideo archives on a sphere that morphs between world projections, rendered with zartigl primitives",
   "repository": {
     "type": "git",
