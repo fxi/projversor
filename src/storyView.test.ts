@@ -300,6 +300,60 @@ describe("ProjversorStoryView", () => {
     expect(calls).toContainEqual(["remove", "story-geojson"]);
     expect(calls.some((c) => c[0] === "add")).toBe(false);
   });
+
+  it("adds an overlay above the field and clears it with the next view", async () => {
+    const { pv, calls } = fakeProjversor();
+    const story = new ProjversorStoryView(pv, false);
+    await story.activate(
+      scene("a", {
+        layer: "pm2-5",
+        overlay: { layer: "fire-radiative-power" },
+      }),
+    );
+    const replace = calls.findIndex((c) => c[0] === "replace");
+    const add = calls.findIndex(
+      (c) => c[0] === "add" && c[1] === "story-overlay",
+    );
+    expect(calls[add]).toEqual(["add", "story-overlay", "scalar"]);
+    expect(add).toBeGreaterThan(replace);
+    expect(story.overlay).toBeDefined();
+    calls.length = 0;
+    await story.activate(scene("b", { layer: "pm2-5" }));
+    expect(calls).toContainEqual(["remove", "story-overlay"]);
+    expect(calls.some((c) => c[0] === "add")).toBe(false);
+    expect(story.overlay).toBeUndefined();
+  });
+});
+
+describe("parseProjversorView overlay", () => {
+  it("accepts a scalar overlay with its own style", () => {
+    const overlay = {
+      layer: "fire-radiative-power",
+      style: { palette: "heat", raster: { vibrance: 1 } },
+    };
+    expect(
+      parseProjversorView(view({ layer: "pm2-5", overlay })).overlay,
+    ).toMatchObject(overlay);
+  });
+
+  it("rejects a vector, unknown or misstyled overlay with its path", () => {
+    expect(() =>
+      parseProjversorView(view({ overlay: { layer: "surface-wind" } })),
+    ).toThrow("views.probe.config.overlay.layer must be a scalar");
+    expect(() =>
+      parseProjversorView(view({ overlay: { layer: "nope" } })),
+    ).toThrow("views.probe.config.overlay.layer must be a scalar");
+    expect(() =>
+      parseProjversorView(view({ overlay: { layer: "pm2-5", opacity: 0.5 } })),
+    ).toThrow("views.probe.config.overlay.opacity is not an overlay key");
+    expect(() =>
+      parseProjversorView(
+        view({
+          overlay: { layer: "pm2-5", style: { raster: { logScale: true } } },
+        }),
+      ),
+    ).toThrow(/overlay\.style/);
+  });
 });
 
 describe("ProjversorStoryView time range", () => {

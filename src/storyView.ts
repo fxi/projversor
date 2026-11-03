@@ -57,6 +57,18 @@ export interface ProjversorViewConfig {
   wrap?: boolean;
   /** GeoJSON drawn above the field during this view, e.g. named regions. */
   geojson?: GeoJSONLayer;
+  /**
+   * A second scalar layer drawn above the field, on the same playhead, e.g.
+   * fires over their smoke. Its own style; the field drives the clock.
+   */
+  overlay?: ProjversorViewOverlay;
+}
+
+/** `config.overlay` of a projversor view. */
+export interface ProjversorViewOverlay {
+  /** projversor scalar layer id (catalog alias). */
+  layer: string;
+  style?: LayerStyleInput;
 }
 
 const KEYS = new Set([
@@ -71,6 +83,7 @@ const KEYS = new Set([
   "transitionMs",
   "wrap",
   "geojson",
+  "overlay",
 ]);
 
 /** Flat keys of the first view format, and where they moved. */
@@ -240,10 +253,45 @@ export function parseProjversorView(
   if (config.geojson !== undefined) {
     parseGeoJSONLayer(config.geojson, `${path}.geojson`);
   }
-  // The parsed style: legacy palettes read as their replacement (heat-alert).
-  return (style
-    ? { ...config, style }
-    : config) as unknown as ProjversorViewConfig;
+  const overlay =
+    config.overlay === undefined
+      ? undefined
+      : parseOverlay(config.overlay, `${path}.overlay`);
+  // The parsed styles: legacy palettes read as their replacement (heat-alert).
+  return {
+    ...config,
+    ...(style && { style }),
+    ...(overlay && { overlay }),
+  } as unknown as ProjversorViewConfig;
+}
+
+/** Validate `config.overlay`: a scalar layer and a style it renders. */
+function parseOverlay(value: unknown, path: string): ProjversorViewOverlay {
+  invariant(isObject(value), `${path} must be an object`);
+  for (const key of Object.keys(value)) {
+    invariant(
+      key === "layer" || key === "style",
+      `${path}.${key} is not an overlay key`,
+    );
+  }
+  const layer = findLayer(String(value.layer));
+  invariant(
+    layer?.kind === "scalar",
+    `${path}.layer must be a scalar projversor layer`,
+  );
+  if (value.style === undefined) {
+    return { layer: String(value.layer) };
+  }
+  const style = parseLayerStyle(value.style, `${path}.style`, {
+    kind: "scalar",
+    supports: STYLE_SUPPORT,
+  });
+  invariant(
+    style.palette === undefined ||
+      layerPalettes(layer).some((p) => p.id === style.palette),
+    `${path}.style.palette is not offered for this layer`,
+  );
+  return { layer: String(value.layer), style };
 }
 
 /**
@@ -272,8 +320,9 @@ export function projversorState(config: ProjversorViewConfig): Omit<
   };
 }
 
-/** Ids of the layers a story view shows: its field and its GeoJSON. */
+/** Ids of the layers a story view shows: its field, overlay and GeoJSON. */
 const VIEW_FIELD = "story-field";
+const VIEW_OVERLAY = "story-overlay";
 const VIEW_GEOJSON = "story-geojson";
 
 /**
@@ -292,11 +341,15 @@ export class ProjversorStoryView {
     private readonly onError: (error: unknown) => void = console.error,
   ) {}
 
+  private overlayShown = false;
+
   async activate(view: ProjversorViewDefinition): Promise<void> {
     const config = parseProjversorView(view);
     const pv = this.projversor;
-    // A view without GeoJSON clears the previous one.
+    // A view without GeoJSON or overlay clears the previous ones.
     await pv.remove(VIEW_GEOJSON);
+    await pv.remove(VIEW_OVERLAY);
+    this.overlayShown = false;
     if (config.geojson) {
       await pv.add(VIEW_GEOJSON, "geojson", config.geojson);
     }
@@ -324,20 +377,29 @@ export class ProjversorStoryView {
         timeRange: state.timeRange,
         time: state.time,
       });
-      return;
+    } else {
+      await pv.replace(
+        VIEW_FIELD,
+        layer.kind === "vector" ? "particles" : "scalar",
+        {
+          source: layer.id,
+          tint,
+          style: state.style,
+          time: state.time,
+          speed: state.speed,
+          timeRange: state.timeRange,
+        },
+      );
     }
-    await pv.replace(
-      VIEW_FIELD,
-      layer.kind === "vector" ? "particles" : "scalar",
-      {
-        source: layer.id,
-        tint,
-        style: state.style,
-        time: state.time,
-        speed: state.speed,
+    // Added after the field: drawn above it, on the playhead it drives.
+    if (config.overlay) {
+      await pv.add(VIEW_OVERLAY, "scalar", {
+        source: findLayer(config.overlay.layer)!.id,
+        style: config.overlay.style ?? {},
         timeRange: state.timeRange,
-      },
-    );
+      });
+      this.overlayShown = true;
+    }
   }
 
   /** The field layer of the shown view, once a view opened. */
@@ -345,12 +407,22 @@ export class ProjversorStoryView {
     return this.projversor.get(VIEW_FIELD) as FieldLayerHandle | undefined;
   }
 
-  /** Warm the cache for a view shown next. */
-  preload(view: ProjversorViewDefinition): Promise<void> {
-    const { layer, playback, timeRange } = parseProjversorView(view);
+  /** The overlay layer of the shown view, when it has one. */
+  get overlay(): FieldLayerHandle | undefined {
+    return this.overlayShown
+      ? (this.projversor.get(VIEW_OVERLAY) as FieldLayerHandle | undefined)
+      : undefined;
+  }
+
+  /** Warm the cache for a view shown next, overlay included. */
+  async preload(view: ProjversorViewDefinition): Promise<void> {
+    const { layer, playback, timeRange, overlay } = parseProjversorView(view);
     const time = playback?.time ?? timeRange?.start;
     const at = time === undefined ? undefined : Date.parse(String(time));
-    return preloadLayer(layer, at);
+    await Promise.all([
+      preloadLayer(layer, at),
+      overlay && preloadLayer(overlay.layer, at),
+    ]);
   }
 
   play(): void {
