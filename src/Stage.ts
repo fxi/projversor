@@ -140,6 +140,12 @@ export class Stage {
     this.overlayKey = "";
   }
 
+  /** Change coastline visibility and invalidate the cached overlay. */
+  setCoastlines(visible: boolean): void {
+    this.overlay.coastlines = visible;
+    this.overlayKey = "";
+  }
+
   /** Show a GeoJSON layer above everything, or remove it (null). */
   setGeoJSON(id: string, layer: GeoJSONLayer | null): void {
     if (layer) {

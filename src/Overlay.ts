@@ -76,6 +76,8 @@ export class Overlay {
   /** GeoJSON layers drawn above everything, in insertion order. */
   readonly geojson = new Map<string, GeoJSONLayer>();
   private readonly colors: OverlayColors;
+  /** Hide generalized coastlines on imagery at island scale. */
+  coastlines = true;
 
   constructor(
     backCanvas: HTMLCanvasElement,
@@ -170,11 +172,13 @@ export class Overlay {
     ctx.strokeStyle = this.colors.graticule;
     ctx.stroke();
 
-    ctx.beginPath();
-    path(land);
-    ctx.lineWidth = 0.8;
-    ctx.strokeStyle = this.colors.coast;
-    ctx.stroke();
+    if (this.coastlines) {
+      ctx.beginPath();
+      path(land);
+      ctx.lineWidth = 0.8;
+      ctx.strokeStyle = this.colors.coast;
+      ctx.stroke();
+    }
 
     ctx.beginPath();
     path(EQUATOR);

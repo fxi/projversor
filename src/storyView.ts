@@ -71,6 +71,8 @@ export interface ProjversorViewConfig {
   transitionMs?: number;
   /** Side layouts: the paragraph follows the globe limb. */
   wrap?: boolean;
+  /** Show generalized coastlines. Defaults to true for each view. */
+  coastlines?: boolean;
   /** GeoJSON drawn above the layers during this view, e.g. named regions. */
   geojson?: GeoJSONLayer;
 }
@@ -89,6 +91,7 @@ const KEYS = new Set([
   "timeRange",
   "transitionMs",
   "wrap",
+  "coastlines",
   "geojson",
   "layers",
 ]);
@@ -274,6 +277,12 @@ export function parseProjversorView(
       `${path}.wrap must be a boolean`,
     );
   }
+  if (config.coastlines !== undefined) {
+    invariant(
+      typeof config.coastlines === "boolean",
+      `${path}.coastlines must be a boolean`,
+    );
+  }
   if (config.geojson !== undefined) {
     parseGeoJSONLayer(config.geojson, `${path}.geojson`);
   }
@@ -413,6 +422,7 @@ export class ProjversorStoryView {
       zoom: state.zoom,
       animate: this.animate,
       durationMs: config.transitionMs,
+      coastlines: config.coastlines ?? true,
     });
     const { layers } = config;
     const shown = this.layers;

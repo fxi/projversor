@@ -45,6 +45,15 @@ describe("parseProjversorView", () => {
     ).toThrow("views.probe.config.geojson.data must be a GeoJSON object");
   });
 
+  it("accepts coastline visibility and rejects malformed values", () => {
+    expect(parseProjversorView(view({ coastlines: false })).coastlines).toBe(
+      false,
+    );
+    expect(() => parseProjversorView(view({ coastlines: "off" }))).toThrow(
+      "views.probe.config.coastlines must be a boolean",
+    );
+  });
+
   it("rejects malformed numbers, dates and tints", () => {
     expect(() => parseProjversorView(view({ rotate: [0, 0] }))).toThrow(
       /rotate/,
@@ -326,6 +335,24 @@ describe("ProjversorStoryView", () => {
         timeRange: null,
         time: Date.parse("2025-01-15T00:00:00Z"),
       },
+    ]);
+  });
+
+  it("restores coastlines after a view hides them", async () => {
+    const { pv, calls } = fakeProjversor();
+    const story = new ProjversorStoryView(pv, false);
+    await story.activate(
+      scene("a", { layer: "surface-wind", coastlines: false }),
+    );
+    expect(calls).toContainEqual([
+      "update",
+      expect.objectContaining({ coastlines: false }),
+    ]);
+    calls.length = 0;
+    await story.activate(scene("b", { layer: "surface-wind" }));
+    expect(calls).toContainEqual([
+      "update",
+      expect.objectContaining({ coastlines: true }),
     ]);
   });
 

@@ -120,6 +120,8 @@ export interface ProjversorState {
   held?: boolean;
   /** Ocean, land and line colors; omitted ones stay. */
   colors?: Partial<OverlayColors>;
+  /** Show generalized coastlines; omitted keeps their visibility. */
+  coastlines?: boolean;
 }
 
 /** Events and their payloads. */
@@ -694,6 +696,12 @@ export class Projversor {
   /** Change the view and playback; a preset morphs the projection. */
   async update(state: ProjversorState): Promise<void> {
     const stage = this.requireStage();
+    if (state.coastlines !== undefined) {
+      if (typeof state.coastlines !== "boolean") {
+        throw new Error("projversor coastlines must be a boolean");
+      }
+      stage.setCoastlines(state.coastlines);
+    }
     const { animate = true, durationMs } = state;
     const { preset, rotate, zoom, inset } = state;
     if (
