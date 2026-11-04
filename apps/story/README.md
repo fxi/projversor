@@ -66,6 +66,10 @@ leaves the map at least 40% of the screen.
   (`speed`, one of `SPEEDS`; `time`, ISO date, else the latest month),
   `transitionMs`, `wrap` and `geojson` (regions drawn above the field
   during the view). Each view starts from the layer's own style.
+  Several layers stack as `layers: [{ layer, tint?, style? }, …]` in place
+  of the flat `layer`, `tint` and `style`, bottom first, e.g. fires over
+  their smoke: the bottom one drives the clock (and the `playback.speed`
+  check), the others follow its playhead; at most one vector layer.
   The flat `palette`, `vibrant`, `speed` and `time` of the first format still
   load, with a deprecation warning. `parseProjversorView`
   (`../../src`) validates it.
@@ -83,9 +87,10 @@ leaves the map at least 40% of the screen.
 
 ## Behavior
 
-- One `Projversor` lives for the whole story; a scene reopens the layer only
-  when its layer or tint changes, and the next scene's index and manifest are
-  warmed in the background.
+- One `Projversor` lives for the whole story; a scene reopens a layer of its
+  stack only when that position's layer or tint changes, and the next scene's
+  index and manifest are warmed in the background. Scenes activated in quick
+  succession run one at a time, and a superseded one is skipped.
 - A scene's timer starts once its data is on screen.
 - The timeline shows the archive months; dragging scrubs within the displayed
   month and opens another month on release.

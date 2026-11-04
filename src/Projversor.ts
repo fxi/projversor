@@ -234,6 +234,15 @@ export class FieldLayerHandle {
     return this.field.openMonth(index);
   }
 
+  /**
+   * Resolves once the layer shows the month holding the playhead, which a
+   * layer not {@link driving} follows: at once for the driving one, or when
+   * `signal` aborts.
+   */
+  followed(signal?: AbortSignal): Promise<void> {
+    return this.field.followed(signal);
+  }
+
   /** Replace the style override over the source's own (`{}` clears it). */
   async update(style: LayerStyleInput): Promise<void> {
     const field = this.field;

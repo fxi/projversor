@@ -68,5 +68,5 @@ export {
 export type {
   ProjversorViewConfig,
   ProjversorViewDefinition,
-  ProjversorViewOverlay,
+  ProjversorViewLayer,
 } from "./storyView";

@@ -28,13 +28,10 @@ export interface ProjversorViewPlayback {
   time?: string;
 }
 
-/** `config` of a `projversor` view, as {@link parseProjversorView} returns it. */
-export interface ProjversorViewConfig {
+/** A layer of a projversor view's stack. */
+export interface ProjversorViewLayer {
   /** projversor layer id (catalog alias, or a tinted pairing id). */
   layer: string;
-  preset: string;
-  rotate?: [number, number, number];
-  zoom?: number;
   /** Scalar entry id coloring the particles; "" colors them by speed. */
   tint?: string;
   /**
@@ -44,6 +41,25 @@ export interface ProjversorViewConfig {
    * the next view.
    */
   style?: LayerStyleInput;
+}
+
+/** `config` of a `projversor` view, as {@link parseProjversorView} returns it. */
+export interface ProjversorViewConfig {
+  /**
+   * The layers, bottom first, e.g. fires over their smoke. The bottom one
+   * drives the clock; the others follow its playhead. At most one vector
+   * layer. A single layer can be written flat, as `layer`, `tint`, `style`.
+   */
+  layers: ProjversorViewLayer[];
+  /** The bottom layer's id: `layers[0].layer`. */
+  layer: string;
+  /** The bottom layer's tint: `layers[0].tint`. */
+  tint?: string;
+  /** The bottom layer's style: `layers[0].style`. */
+  style?: LayerStyleInput;
+  preset: string;
+  rotate?: [number, number, number];
+  zoom?: number;
   playback?: ProjversorViewPlayback;
   /**
    * Time window playback loops over, as zartigl's `timeRange`:
@@ -55,21 +71,12 @@ export interface ProjversorViewConfig {
   transitionMs?: number;
   /** Side layouts: the paragraph follows the globe limb. */
   wrap?: boolean;
-  /** GeoJSON drawn above the field during this view, e.g. named regions. */
+  /** GeoJSON drawn above the layers during this view, e.g. named regions. */
   geojson?: GeoJSONLayer;
-  /**
-   * A second scalar layer drawn above the field, on the same playhead, e.g.
-   * fires over their smoke. Its own style; the field drives the clock.
-   */
-  overlay?: ProjversorViewOverlay;
 }
 
-/** `config.overlay` of a projversor view. */
-export interface ProjversorViewOverlay {
-  /** projversor scalar layer id (catalog alias). */
-  layer: string;
-  style?: LayerStyleInput;
-}
+/** Keys of a stack entry: also the flat keys of a single layer. */
+const LAYER_KEYS = ["layer", "tint", "style"] as const;
 
 const KEYS = new Set([
   "layer",
@@ -83,7 +90,7 @@ const KEYS = new Set([
   "transitionMs",
   "wrap",
   "geojson",
-  "overlay",
+  "layers",
 ]);
 
 /** Flat keys of the first view format, and where they moved. */
@@ -177,12 +184,49 @@ export function parseProjversorView(
   view: ProjversorViewDefinition,
 ): ProjversorViewConfig {
   const path = `views.${view.id}.config`;
-  const layer = findLayer(String(view.config.layer));
-  invariant(layer, `${path}.layer is not a projversor layer`);
-  const config = migrateLegacy(view.config, path, layer.kind);
+  const stack = view.config.layers;
+  if (stack !== undefined) {
+    invariant(
+      Array.isArray(stack) && stack.length > 0,
+      `${path}.layers must be a non-empty array`,
+    );
+    // The first format's style keys too: they would style no layer.
+    for (const key of [...LAYER_KEYS, "palette", "vibrant"]) {
+      invariant(
+        view.config[key] === undefined,
+        `${path}.${key} is set in layers, not next to them`,
+      );
+    }
+  }
+  // The bottom layer's kind, for the first format's flat keys.
+  const bottom = findLayer(
+    String(
+      stack ? (stack[0] as { layer?: unknown })?.layer : view.config.layer,
+    ),
+  );
+  invariant(
+    bottom,
+    `${path}.${stack ? "layers.0.layer" : "layer"} is not a projversor layer`,
+  );
+  const config = migrateLegacy(view.config, path, bottom.kind);
   for (const key of Object.keys(config)) {
     invariant(KEYS.has(key), `${path}.${key} is not a projversor view key`);
   }
+  const layers = stack
+    ? (stack as unknown[]).map((entry, i) =>
+        parseViewLayer(entry, `${path}.layers.${i}`),
+      )
+    : [
+        parseViewLayer(
+          Object.fromEntries(LAYER_KEYS.map((key) => [key, config[key]])),
+          path,
+        ),
+      ];
+  invariant(
+    layers.filter((entry) => findLayer(entry.layer)!.kind === "vector")
+      .length <= 1,
+    `${path}.layers holds more than one vector layer`,
+  );
   invariant(findPreset(String(config.preset)), `${path}.preset is unknown`);
   if (config.rotate !== undefined) {
     invariant(
@@ -200,19 +244,6 @@ export function parseProjversorView(
       );
     }
   }
-  let style: LayerStyleInput | undefined;
-  if (config.style !== undefined) {
-    style = parseLayerStyle(config.style, `${path}.style`, {
-      kind: layer.kind,
-      supports: STYLE_SUPPORT,
-    });
-    const palette = style.palette;
-    invariant(
-      palette === undefined ||
-        layerPalettes(layer).some((p) => p.id === palette),
-      `${path}.style.palette is not offered for this layer`,
-    );
-  }
   if (config.playback !== undefined) {
     const playback = config.playback;
     invariant(isObject(playback), `${path}.playback must be an object`);
@@ -224,8 +255,8 @@ export function parseProjversorView(
     }
     invariant(
       playback.speed === undefined ||
-        SPEEDS[layer.kind].includes(playback.speed as number),
-      `${path}.playback.speed must be one of ${SPEEDS[layer.kind].join(", ")}`,
+        SPEEDS[bottom.kind].includes(playback.speed as number),
+      `${path}.playback.speed must be one of ${SPEEDS[bottom.kind].join(", ")}`,
     );
     invariant(
       playback.time === undefined ||
@@ -237,13 +268,6 @@ export function parseProjversorView(
   if (config.timeRange !== undefined) {
     parseTimeRange(config.timeRange, `${path}.timeRange`);
   }
-  if (config.tint !== undefined) {
-    invariant(
-      layer.kind === "vector" &&
-        (config.tint === "" || isTintEntry(String(config.tint))),
-      `${path}.tint must be "" or a scalar entry id, on a vector layer`,
-    );
-  }
   if (config.wrap !== undefined) {
     invariant(
       typeof config.wrap === "boolean",
@@ -253,45 +277,51 @@ export function parseProjversorView(
   if (config.geojson !== undefined) {
     parseGeoJSONLayer(config.geojson, `${path}.geojson`);
   }
-  const overlay =
-    config.overlay === undefined
-      ? undefined
-      : parseOverlay(config.overlay, `${path}.overlay`);
   // The parsed styles: legacy palettes read as their replacement (heat-alert).
+  // The bottom layer is mirrored flat, for the single-layer state.
   return {
     ...config,
-    ...(style && { style }),
-    ...(overlay && { overlay }),
+    ...layers[0],
+    layers,
   } as unknown as ProjversorViewConfig;
 }
 
-/** Validate `config.overlay`: a scalar layer and a style it renders. */
-function parseOverlay(value: unknown, path: string): ProjversorViewOverlay {
+/**
+ * Validate a layer of the stack, or the flat keys of a single layer when
+ * `path` is the view's: its catalog id, a style it renders, its tint.
+ */
+function parseViewLayer(value: unknown, path: string): ProjversorViewLayer {
   invariant(isObject(value), `${path} must be an object`);
   for (const key of Object.keys(value)) {
     invariant(
-      key === "layer" || key === "style",
-      `${path}.${key} is not an overlay key`,
+      (LAYER_KEYS as readonly string[]).includes(key),
+      `${path}.${key} is not a layer key`,
     );
   }
   const layer = findLayer(String(value.layer));
-  invariant(
-    layer?.kind === "scalar",
-    `${path}.layer must be a scalar projversor layer`,
-  );
-  if (value.style === undefined) {
-    return { layer: String(value.layer) };
+  invariant(layer, `${path}.layer is not a projversor layer`);
+  const entry: ProjversorViewLayer = { layer: String(value.layer) };
+  if (value.style !== undefined) {
+    const style = parseLayerStyle(value.style, `${path}.style`, {
+      kind: layer.kind,
+      supports: STYLE_SUPPORT,
+    });
+    invariant(
+      style.palette === undefined ||
+        layerPalettes(layer).some((p) => p.id === style.palette),
+      `${path}.style.palette is not offered for this layer`,
+    );
+    entry.style = style;
   }
-  const style = parseLayerStyle(value.style, `${path}.style`, {
-    kind: "scalar",
-    supports: STYLE_SUPPORT,
-  });
-  invariant(
-    style.palette === undefined ||
-      layerPalettes(layer).some((p) => p.id === style.palette),
-    `${path}.style.palette is not offered for this layer`,
-  );
-  return { layer: String(value.layer), style };
+  if (value.tint !== undefined) {
+    invariant(
+      layer.kind === "vector" &&
+        (value.tint === "" || isTintEntry(String(value.tint))),
+      `${path}.tint must be "" or a scalar entry id, on a vector layer`,
+    );
+    entry.tint = String(value.tint);
+  }
+  return entry;
 }
 
 /**
@@ -320,14 +350,17 @@ export function projversorState(config: ProjversorViewConfig): Omit<
   };
 }
 
-/** Ids of the layers a story view shows: its field, overlay and GeoJSON. */
-const VIEW_FIELD = "story-field";
-const VIEW_OVERLAY = "story-overlay";
+/**
+ * Ids of the layers a story view shows: a slot per stack position, and its
+ * GeoJSON. Slots are added bottom up and removed top down, so insertion
+ * order, the draw order, stays the stack order.
+ */
+const viewSlot = (index: number) => `story-layer-${index}`;
 const VIEW_GEOJSON = "story-geojson";
 
 /**
  * Story view on one persistent projversor: each scene morphs the view from
- * the previous one, and the layer reopens only when it changes.
+ * the previous one, and a layer of the stack reopens only when it changes.
  */
 export class ProjversorStoryView {
   /**
@@ -341,15 +374,35 @@ export class ProjversorStoryView {
     private readonly onError: (error: unknown) => void = console.error,
   ) {}
 
-  private overlayShown = false;
+  /** Aborted by the next activation: the current one stops between steps. */
+  private superseded = new AbortController();
+  private queue: Promise<void> = Promise.resolve();
 
+  /**
+   * Show a view. Activations run one at a time: one called while another
+   * runs waits for it, and is skipped once a later one supersedes it.
+   */
   async activate(view: ProjversorViewDefinition): Promise<void> {
     const config = parseProjversorView(view);
+    this.superseded.abort();
+    const superseded = new AbortController();
+    this.superseded = superseded;
+    const run = this.queue.then(() => this.show(config, superseded.signal));
+    this.queue = run.catch(() => {});
+    return run;
+  }
+
+  private async show(
+    config: ProjversorViewConfig,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const stale = () => signal.aborted;
+    if (stale()) {
+      return;
+    }
     const pv = this.projversor;
-    // A view without GeoJSON or overlay clears the previous ones.
+    // A view without GeoJSON clears the previous one.
     await pv.remove(VIEW_GEOJSON);
-    await pv.remove(VIEW_OVERLAY);
-    this.overlayShown = false;
     if (config.geojson) {
       await pv.add(VIEW_GEOJSON, "geojson", config.geojson);
     }
@@ -361,68 +414,100 @@ export class ProjversorStoryView {
       animate: this.animate,
       durationMs: config.transitionMs,
     });
-    const layer = findLayer(config.layer)!;
+    const { layers } = config;
+    const shown = this.layers;
+    for (let i = shown.length - 1; i >= layers.length; i--) {
+      await pv.remove(viewSlot(i));
+    }
+    // Bottom up; a slot giving up the particles to another goes first, as
+    // projversor shows one particles layer at a time.
+    const order = layers.map((_, i) => i);
+    const particles = layers.findIndex(
+      (entry) => findLayer(entry.layer)!.kind === "vector",
+    );
+    const giving = shown.findIndex(
+      (handle, i) =>
+        handle.type === "particles" && i < layers.length && i !== particles,
+    );
+    if (particles >= 0 && giving >= 0) {
+      order.splice(order.indexOf(giving), 1);
+      order.unshift(giving);
+    }
+    for (const i of order) {
+      if (stale()) {
+        return;
+      }
+      await this.showLayer(i, layers[i], state);
+    }
+    // Once the stack is the view's: the layers above show the playhead's
+    // month, so the view resolves with all its data on screen.
+    await Promise.all(
+      this.layers.slice(1).map((layer) => layer.followed(signal)),
+    );
+  }
+
+  /** Show `entry` in slot `index`: restyled when it stays, else replaced. */
+  private async showLayer(
+    index: number,
+    entry: ProjversorViewLayer,
+    state: ReturnType<typeof projversorState>,
+  ): Promise<void> {
+    const pv = this.projversor;
+    const id = viewSlot(index);
+    const layer = findLayer(entry.layer)!;
     // "" is "no tint"; omitted, the layer's own.
     const tint =
       layer.kind === "vector"
-        ? config.tint === ""
+        ? entry.tint === ""
           ? null
-          : (config.tint ?? layer.tint ?? null)
+          : (entry.tint ?? layer.tint ?? null)
         : null;
-    const field = pv.get(VIEW_FIELD) as FieldLayerHandle | undefined;
-    if (field && field.source.id === layer.id && field.tint === tint) {
-      await field.update(state.style);
-      await pv.update({
-        speed: state.speed,
-        timeRange: state.timeRange,
-        time: state.time,
-      });
-    } else {
-      await pv.replace(
-        VIEW_FIELD,
-        layer.kind === "vector" ? "particles" : "scalar",
-        {
-          source: layer.id,
-          tint,
-          style: state.style,
-          time: state.time,
-          speed: state.speed,
-          timeRange: state.timeRange,
-        },
-      );
+    const style = entry.style ?? {};
+    // The bottom layer drives the clock; the others follow its playhead.
+    const clock =
+      index === 0
+        ? { time: state.time, speed: state.speed, timeRange: state.timeRange }
+        : {};
+    const handle = pv.get(id) as FieldLayerHandle | undefined;
+    if (handle && handle.source.id === layer.id && handle.tint === tint) {
+      await handle.update(style);
+      if (index === 0) {
+        await pv.update(clock);
+      }
+      return;
     }
-    // Added after the field: drawn above it, on the playhead it drives.
-    if (config.overlay) {
-      await pv.add(VIEW_OVERLAY, "scalar", {
-        source: findLayer(config.overlay.layer)!.id,
-        style: config.overlay.style ?? {},
-        timeRange: state.timeRange,
-      });
-      this.overlayShown = true;
-    }
+    await pv.replace(id, layer.kind === "vector" ? "particles" : "scalar", {
+      source: layer.id,
+      tint,
+      style,
+      ...clock,
+    });
   }
 
-  /** The field layer of the shown view, once a view opened. */
+  /** The stack of the shown view, bottom first. */
+  get layers(): FieldLayerHandle[] {
+    const layers: FieldLayerHandle[] = [];
+    for (
+      let handle = this.projversor.get(viewSlot(0));
+      handle;
+      handle = this.projversor.get(viewSlot(layers.length))
+    ) {
+      layers.push(handle as FieldLayerHandle);
+    }
+    return layers;
+  }
+
+  /** The bottom layer of the shown view, driving the clock, once one opened. */
   get field(): FieldLayerHandle | undefined {
-    return this.projversor.get(VIEW_FIELD) as FieldLayerHandle | undefined;
+    return this.projversor.get(viewSlot(0)) as FieldLayerHandle | undefined;
   }
 
-  /** The overlay layer of the shown view, when it has one. */
-  get overlay(): FieldLayerHandle | undefined {
-    return this.overlayShown
-      ? (this.projversor.get(VIEW_OVERLAY) as FieldLayerHandle | undefined)
-      : undefined;
-  }
-
-  /** Warm the cache for a view shown next, overlay included. */
+  /** Warm the cache for a view shown next, its whole stack. */
   async preload(view: ProjversorViewDefinition): Promise<void> {
-    const { layer, playback, timeRange, overlay } = parseProjversorView(view);
+    const { layers, playback, timeRange } = parseProjversorView(view);
     const time = playback?.time ?? timeRange?.start;
     const at = time === undefined ? undefined : Date.parse(String(time));
-    await Promise.all([
-      preloadLayer(layer, at),
-      overlay && preloadLayer(overlay.layer, at),
-    ]);
+    await Promise.all(layers.map((entry) => preloadLayer(entry.layer, at)));
   }
 
   play(): void {

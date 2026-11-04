@@ -61,6 +61,8 @@ const REDISTRIB_DECAY = 0.92;
 const REDISTRIB_MAX_DROP = 0.1;
 /** Frames still animated while paused, to rebuild trails after a change. */
 const SETTLE_FRAMES_MAX = 120;
+/** Month loads a follower waits for while the playing clock outruns them. */
+const FOLLOW_LOADS = 3;
 
 /** Style keys projversor renders. */
 export const STYLE_SUPPORT = {
@@ -197,8 +199,14 @@ export class FieldLayer {
   /** Bumped on every layer or month switch; stale loads drop out. */
   private loadId = 0;
   private pendingRespawn = false;
-  /** A follower's month load in flight. */
-  private following = false;
+  /** A follower's month load in flight, and its load id. */
+  private following: Promise<void> | null = null;
+  private followingId = 0;
+  /**
+   * Load id of a layer switch in flight: a follower waits for it rather
+   * than supersede it, as the switch opens the playhead's month itself.
+   */
+  private switching: number | null = null;
   /** Playhead of the last drawn frame, for a follower's paused redraw. */
   private lastMs = Number.NaN;
   /**
@@ -349,6 +357,23 @@ export class FieldLayer {
           : options.tint
         : null;
     const id = ++this.loadId;
+    this.switching = id;
+    try {
+      return await this.switchTo(layer, id, range, tintId, options);
+    } finally {
+      if (this.switching === id) {
+        this.switching = null;
+      }
+    }
+  }
+
+  private async switchTo(
+    layer: ProjversorLayer,
+    id: number,
+    range: TimeRange | null,
+    tintId: string | null,
+    options: { at?: number; speed?: number; style?: LayerStyleInput },
+  ): Promise<boolean> {
     this.dropUpcoming();
     this.setStatus(`Loading ${layer.label}…`);
     const stale = () => id !== this.loadId || this.destroyed;
@@ -467,28 +492,65 @@ export class FieldLayer {
    * edge frame meanwhile.
    */
   follow(): void {
+    this.followLoad();
+  }
+
+  /**
+   * {@link follow}, resolved once the month holding the playhead shows: at
+   * once when it already does, when a load fails or is superseded, when
+   * `signal` aborts, or after a few months the playing clock outran.
+   */
+  async followed(signal?: AbortSignal): Promise<void> {
+    const aborted = new Promise<void>((resolve) =>
+      signal?.addEventListener("abort", () => resolve(), { once: true }),
+    );
+    for (let i = 0; i < FOLLOW_LOADS && !signal?.aborted; i++) {
+      const load = this.followLoad();
+      if (!load) {
+        return;
+      }
+      const shown = this.chunkIndexValue;
+      await Promise.race([load, aborted]);
+      // A load may have been for a month the playhead left meanwhile.
+      if (this.chunkIndexValue === shown) {
+        return;
+      }
+    }
+  }
+
+  /** The follower's month load in flight, started when needed, or null. */
+  private followLoad(): Promise<void> | null {
+    // A load superseded by a switch or a seek no longer counts.
+    if (this.following && this.followingId === this.loadId) {
+      return this.following;
+    }
     const ms = this.clock.ms;
     const times = this.times;
     if (
       this.driving ||
       !this.openedValue ||
-      this.following ||
+      this.switching !== null ||
       (times.length && ms >= times[0] && ms <= times[times.length - 1])
     ) {
-      return;
+      return null;
     }
     const chunk = this.chunksValue.find((c) =>
       sourceCoversTime(c, { time: ms }),
     );
     if (!chunk || chunk === this.chunksValue[this.chunkIndexValue]) {
-      return;
+      return null;
     }
-    this.following = true;
-    this.openChunk(chunk, ++this.loadId, ms)
+    const id = ++this.loadId;
+    const load = this.openChunk(chunk, id, ms)
       .catch((error: unknown) => console.error(error))
       .finally(() => {
-        this.following = false;
+        if (this.following === load) {
+          this.following = null;
+        }
       });
+    this.following = load;
+    this.followingId = id;
+    return load;
   }
 
   /** Open a month at `at`, or at its start. */
