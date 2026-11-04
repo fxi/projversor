@@ -149,7 +149,8 @@ export class SphereParticles {
     p.mat3("u_rot_inv", frame.rotInv);
     p.float("u_step", style.speed / frame.pxPerRadian);
     p.float("u_max_speed", style.maxSpeed);
-    p.float("u_keep_cos", Math.cos(visibleCap(frame)));
+    // 1 - cos(cap) without cancellation: the cap is tiny at high zoom.
+    p.float("u_keep_h", 2 * Math.sin(visibleCap(frame) / 2) ** 2);
     p.float("u_drop", style.drop);
     p.float("u_drop_bump", style.dropBump);
     p.uint("u_frame", this.frame);

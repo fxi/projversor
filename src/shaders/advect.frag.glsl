@@ -11,7 +11,7 @@ uniform sampler2D u_state;  // xyz, w = speed fraction, -1 on a respawn
 uniform mat3 u_rot_inv;     // rotated frame -> geographic
 uniform float u_step;       // radians per frame at u_max_speed
 uniform float u_max_speed;
-uniform float u_keep_cos;   // particles farther than this cap respawn
+uniform float u_keep_h;     // 1 - cos of the visible cap: particles beyond it respawn
 uniform float u_drop;       // per-frame respawn probability
 uniform float u_drop_bump;  // added per m/s
 uniform uint u_frame;      // advection counter, seeds the random streams
@@ -34,17 +34,27 @@ float draw(uint stream) {
 
 /** Uniform by area in the visible cap around the projection center. */
 vec3 spawn() {
-    float cosc = mix(1.0, u_keep_cos, draw(RADIUS));
-    float sinc = sqrt(max(0.0, 1.0 - cosc * cosc));
+    // Area grows as h = 1 - cos(c). Drawing h, not cos(c), keeps small caps
+    // (high zoom) continuous: cos(c) near 1 has few float32 values, which
+    // spawned particles on rings.
+    float h = u_keep_h * draw(RADIUS);
+    float cosc = 1.0 - h;
+    float sinc = sqrt(max(0.0, h * (2.0 - h)));
     float az = TAU * draw(AZIMUTH);
     return u_rot_inv * vec3(cosc, sinc * cos(az), sinc * sin(az));
+}
+
+/** Beyond the visible cap: the chord to the center, |p - c|^2 = 2h, stays exact for small caps. */
+bool outsideCap(vec3 p) {
+    vec3 d = p - u_rot_inv[0];
+    return dot(d, d) > 2.0 * u_keep_h;
 }
 
 void main() {
     vec3 p = texture(u_state, v_uv).xyz;
     // u_rot_inv[0] is the projection center in geographic coordinates.
     bool respawn = u_reset > 0.5 || dot(p, p) < 0.5 ||
-        dot(u_rot_inv[0], p) < u_keep_cos;
+        outsideCap(p);
     float speed = 0.0;
     if (!respawn) {
         vec3 vel = sampleVelocity(p);

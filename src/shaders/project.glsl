@@ -57,8 +57,11 @@ vec2 rawProject(int id, float lam, float phi) {
     if (id == 3) {
         k = sqrt(2.0 / max(1.0 + cxcy, 1e-7));
     } else {
-        float c = acos(clamp(cxcy, -1.0, 1.0));
-        k = c / max(sin(c), 1e-6);
+        // acos(cxcy) steps by about 3e-4 rad (2 km) near the center in float32,
+        // which draws rings at high zoom; atan of sine over cosine does not.
+        float s = length(vec2(cy * sin(lam), sin(phi)));
+        float c = atan(s, cxcy);
+        k = s > 1e-6 ? c / s : 1.0;
     }
     return vec2(k * cy * sin(lam), k * sin(phi));
 }
@@ -86,5 +89,6 @@ vec2 lonLat(vec3 r) {
 
 /** Angular distance from the projection center, rotated frame. */
 float centerDistance(vec3 r) {
-    return acos(clamp(r.x, -1.0, 1.0));
+    // As rawProject: acos near 1 loses the small distances high zooms need.
+    return atan(length(r.yz), r.x);
 }

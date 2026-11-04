@@ -31,7 +31,8 @@ export const TRANSITION_MS = 2200;
 /** Easing of compass, zoom and rotate controls. */
 export const VIEW_MS = 450;
 const ZOOM_MIN = 0.5;
-const ZOOM_MAX = 200;
+/** Zoom 1 fits the globe; 5000 shows about 3 km, enough for 30 m regional fields. */
+const ZOOM_MAX = 5000;
 /** Bearings below this (degrees) open locked north up. */
 const NORTH_EPSILON = 0.5;
 
