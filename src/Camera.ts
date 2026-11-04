@@ -5,6 +5,7 @@ import {
   withBearing,
   type ScreenProjection,
 } from "./bearing";
+import { planFlight, type FlightPath } from "./flight";
 import { PRESETS, findPreset, type Preset } from "./presets";
 import { PROJECTIONS, cartesian, fitScale } from "./projections";
 import {
@@ -75,12 +76,15 @@ export class Camera {
     duration: number;
     from: Inset;
     to: Inset;
+    progress?: (t: number) => number;
   } | null = null;
   private transition: {
     start: number;
     duration: number;
     rotate: (t: number) => Rotate;
     zoom: [number, number];
+    flight?: FlightPath;
+    blendAt?: (t: number) => number;
   } | null = null;
   private drag: {
     v0: Rotate;
@@ -136,6 +140,10 @@ export class Camera {
    * ease rotation and zoom alone.
    */
   goTo(target: ProjversorViewTarget): void {
+    if (target.durationMs !== undefined && target.durationMs <= 0) {
+      this.jumpTo(target);
+      return;
+    }
     const preset = findPreset(target.preset);
     if (target.inset) {
       this.setInset(
@@ -163,11 +171,20 @@ export class Camera {
       return;
     }
     const { rotate, zoom } = this.target();
-    this.easeTo(
-      target.rotate ?? rotate,
-      clampZoom(target.zoom ?? zoom),
-      target.durationMs,
-    );
+    const destination = {
+      rotate: target.rotate ?? rotate,
+      zoom: clampZoom(target.zoom ?? zoom),
+    };
+    if (planFlight(this.view, destination)) {
+      this.morph(
+        this.presetValue,
+        destination.rotate,
+        destination.zoom,
+        target.durationMs ?? TRANSITION_MS,
+      );
+    } else {
+      this.easeTo(destination.rotate, destination.zoom, target.durationMs);
+    }
   }
 
   /** Show a preset, rotation and zoom at once. */
@@ -210,22 +227,70 @@ export class Camera {
     duration: number,
   ): void {
     const { blend } = this.view;
-    const from = blend.t < 0.5 ? blend.a : blend.b;
     const to = PROJECTIONS[preset.projection];
     const { width, height } = viewArea(this.view);
-    this.view.blend = {
-      a: from,
-      b: to,
-      ka: fitScale(from, width, height),
-      kb: fitScale(to, width, height),
-      t: 0,
-    };
+    let blendAt: (t: number) => number;
+    if (to === blend.a || to === blend.b) {
+      // Reversing a morph keeps the displayed projection mixture intact.
+      const fromT = blend.t;
+      const toT = to === blend.a ? 0 : 1;
+      blendAt = (t) => fromT + (toT - fromT) * t;
+    } else if (blend.a !== blend.b && blend.t > 0 && blend.t < 1) {
+      // Finish the displayed mixture before introducing a third projection.
+      // Both sides of the handover show blend.b, so interruption never snaps.
+      const fromT = blend.t;
+      let handedOver = false;
+      blendAt = (t) => {
+        if (t < 0.3) {
+          return fromT + ((1 - fromT) * t) / 0.3;
+        }
+        if (!handedOver) {
+          const area = viewArea(this.view);
+          this.view.blend = {
+            a: blend.b,
+            b: to,
+            ka: fitScale(blend.b, area.width, area.height),
+            kb: fitScale(to, area.width, area.height),
+            t: 0,
+          };
+          handedOver = true;
+        }
+        return (t - 0.3) / 0.7;
+      };
+    } else {
+      const from = blend.t < 0.5 ? blend.a : blend.b;
+      this.view.blend = {
+        a: from,
+        b: to,
+        ka: fitScale(from, width, height),
+        kb: fitScale(to, width, height),
+        t: 0,
+      };
+      blendAt = (t) => t;
+    }
+    const targetZoom = clampZoom(zoom);
+    const flight =
+      planFlight(this.view, { rotate, zoom: targetZoom }, duration) ??
+      undefined;
+    const start = performance.now();
+    const resolvedDuration = flight?.durationMs ?? duration;
     this.transition = {
-      start: performance.now(),
-      duration,
+      start,
+      duration: resolvedDuration,
       rotate: interpolateRotation(this.view.rotate, rotate),
-      zoom: [this.view.zoom, clampZoom(zoom)],
+      zoom: [this.view.zoom, targetZoom],
+      flight,
+      blendAt,
     };
+    if (flight && this.insetTransition) {
+      this.insetTransition = {
+        ...this.insetTransition,
+        start,
+        duration: resolvedDuration,
+        progress: (t) => flight.sample(t).progress,
+        from: { ...(this.view.inset ?? NO_INSET) },
+      };
+    }
     this.setPreset(preset);
   }
 
@@ -391,7 +456,12 @@ export class Camera {
       return;
     }
     const raw = Math.min(1, (now - step.start) / step.duration);
-    this.view.inset = lerpInset(step.from, step.to, easeCubicInOut(raw));
+    const eased = easeCubicInOut(raw);
+    this.view.inset = lerpInset(
+      step.from,
+      step.to,
+      step.progress?.(eased) ?? eased,
+    );
     this.refit();
     if (raw >= 1) {
       this.insetTransition = null;
@@ -407,13 +477,19 @@ export class Camera {
     }
     const raw = Math.min(1, (now - transition.start) / transition.duration);
     const e = easeCubicInOut(raw);
-    this.view.blend.t = e;
-    this.view.rotate = transition.rotate(e);
+    const flight = transition.flight?.sample(e);
+    const progress = flight?.progress ?? e;
+    this.view.blend.t = transition.blendAt?.(progress) ?? progress;
+    this.view.rotate = transition.rotate(progress);
     this.view.zoom =
+      flight?.zoom ??
       transition.zoom[0] + (transition.zoom[1] - transition.zoom[0]) * e;
     if (raw >= 1) {
-      const { b, kb } = this.view.blend;
-      this.view.blend = { a: b, b, ka: kb, kb, t: 0 };
+      this.view.zoom = transition.zoom[1];
+      const { a, b, ka, kb, t } = this.view.blend;
+      const end = t < 0.5 ? a : b;
+      const k = t < 0.5 ? ka : kb;
+      this.view.blend = { a: end, b: end, ka: k, kb: k, t: 0 };
       this.transition = null;
     }
   }
