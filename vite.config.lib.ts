@@ -3,10 +3,13 @@ import glsl from "vite-plugin-glsl";
 import dts from "vite-plugin-dts";
 import pkg from "./package.json" with { type: "json" };
 
-// Dependencies stay imports, so a page that also uses zartigl loads it once.
-// The world atlas (JSON, a dev dependency) is bundled: a JSON import needs an
-// import attribute outside bundlers.
-const dependencies = Object.keys(pkg.dependencies);
+// Dependencies and peers stay imports: zartigl is a peer, so a page that also
+// uses it loads one copy. The world atlas (JSON, a dev dependency) is bundled:
+// a JSON import needs an import attribute outside bundlers.
+const dependencies = Object.keys({
+  ...pkg.dependencies,
+  ...pkg.peerDependencies,
+});
 const external = (id: string) =>
   dependencies.some((name) => id === name || id.startsWith(`${name}/`));
 

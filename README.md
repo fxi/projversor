@@ -11,12 +11,12 @@ zartigl's MapLibre layer instead.
 ## Install
 
 ```bash
-npm install @fxi/projversor
+npm install @fxi/projversor @fxi/zartigl
 ```
 
-An ES module with its types. `@fxi/zartigl` and d3 stay dependencies, so a
-page that also imports zartigl loads it once; the detailed coastlines load on
-demand.
+An ES module with its types. `@fxi/zartigl` is a peer dependency, so a page
+that also imports zartigl loads one copy. d3 stays a dependency; the detailed
+coastlines load on demand.
 
 ## API
 
