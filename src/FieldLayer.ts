@@ -2,7 +2,6 @@ import {
   mergeStyles,
   migrateLegacyStyle,
   parseLayerStyle,
-  requireCatalogEntry,
   resolveEntryStyle,
   resolveLayerStyle,
   sourceCoversTime,
@@ -32,6 +31,7 @@ import { GeoVideoField } from "./GeoVideoField";
 import {
   PROJVERSOR_LAYERS,
   findLayer,
+  layerEntry,
   layerPalettes,
   loadChunks,
   loadTintChunks,
@@ -704,7 +704,7 @@ export class FieldLayer {
       this.viewStyleValue = migrateLegacyStyle(viewStyle);
     }
     const layer = this.layerValue;
-    const entry = requireCatalogEntry(layer.entryId);
+    const entry = layerEntry(layer);
     const style = resolveEntryStyle(entry, layer.style, this.viewStyleValue);
     this.particleSettings = style.particles;
     this.rasterOpacity = style.raster.opacity;

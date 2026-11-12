@@ -36,10 +36,16 @@ export type { Inset } from "./view";
 export {
   PROJVERSOR_LAYERS,
   TINT_LAYERS,
+  coverage,
   findLayer,
   isTintEntry,
+  isTintFor,
   layerPalettes,
+  layerSearchText,
+  loadLayers,
   preloadLayer,
+  tintLayersFor,
+  useLayerCatalog,
 } from "./layers";
 export type { ProjversorLayer } from "./layers";
 export { decodeShare, encodeShare } from "./share";

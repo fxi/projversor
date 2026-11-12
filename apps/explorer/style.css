@@ -605,6 +605,101 @@ body {
   color: var(--ink);
 }
 
+/* Bar button opening a layer list; reads like the select it replaced. */
+.chip {
+  display: flex;
+  align-items: center;
+  text-align: left;
+}
+
+.chip-text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ---- layer list --------------------------------------------------------- */
+
+.pick {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  color: var(--ink);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+.pick[hidden] {
+  display: none;
+}
+
+.pick-search {
+  flex: none;
+  margin: 0;
+  padding: 12px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.pick-search::placeholder {
+  color: var(--muted);
+}
+
+.pick-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 4px 0 8px;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.pick-group {
+  padding: 10px 14px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pick-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 14px 6px 12px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+
+.pick-item.active {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.pick-item[aria-selected="true"] {
+  border-left-color: var(--equator);
+}
+
+.pick-detail {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.pick-empty {
+  padding: 12px 14px;
+  color: var(--muted);
+}
+
 @media (max-width: 640px) {
   :root {
     --gap: 12px;

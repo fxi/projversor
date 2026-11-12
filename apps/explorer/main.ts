@@ -6,22 +6,24 @@ import {
   PROJVERSOR_LAYERS,
   Projversor,
   SPEEDS,
-  TINT_LAYERS,
   chunkLabel,
   decodeShare,
   encodeShare,
   findLayer,
   findPreset,
   formatUnit,
-  isTintEntry,
+  isTintFor,
   layerPalettes,
+  layerSearchText,
   legendTicks,
+  loadLayers,
   linearTicks,
   monthLegend,
   playheadLabel,
   rampGradient,
   rampPosition,
   timeTicks,
+  tintLayersFor,
   type FieldLayerConfig,
   type FieldLayerHandle,
   type ProjversorLayer,
@@ -30,6 +32,7 @@ import {
 } from "../../src";
 import { Compass } from "./Compass";
 import { GradePanel } from "./GradePanel";
+import { LayerPicker, type PickItem } from "./LayerPicker";
 
 /** Zoom button factor and rotate button step (degrees of longitude). */
 const ZOOM_STEP = 1.5;
@@ -74,9 +77,9 @@ function refs(root: HTMLElement) {
     ramp: get<HTMLElement>("ramp"),
     ticks: get<HTMLElement>("ticks"),
     projection: get<HTMLSelectElement>("projection"),
-    layer: get<HTMLSelectElement>("layer"),
+    layer: get<HTMLButtonElement>("layer"),
     tintField: get<HTMLElement>("tintField"),
-    tint: get<HTMLSelectElement>("tint"),
+    tint: get<HTMLButtonElement>("tint"),
     share: get<HTMLButtonElement>("share"),
   };
 }
@@ -91,6 +94,8 @@ class ProjectionDemo {
   private readonly shared: Partial<ShareState>;
   private readonly compass: Compass;
   private readonly gradePanel: GradePanel;
+  private readonly layerPicker: LayerPicker;
+  private readonly tintPicker: LayerPicker;
   /** The shown layer, once opened. */
   private field: FieldLayerHandle | null = null;
   /** Timeline thumb held: playback waits for its release. */
@@ -122,12 +127,33 @@ class ProjectionDemo {
       this.ui.gradePanel,
       (grade) => this.setGrade(grade),
     );
+    const run = (task: Promise<void>) =>
+      task.catch((error: unknown) => this.fail(error));
+    this.layerPicker = new LayerPicker(this.ui.layer, {
+      placeholder: "Search layers: currents, ozone, leman…",
+      onPick: (id) => {
+        const next = findLayer(id);
+        if (next) {
+          void run(this.open(next, { frame: true }));
+        }
+      },
+    });
+    this.tintPicker = new LayerPicker(this.ui.tint, {
+      placeholder: "Color particles by…",
+      onPick: (id) => {
+        const field = this.field;
+        if (field) {
+          void run(this.open(field.source, { tint: id || null }));
+        }
+      },
+    });
   }
 
   /** Create the renderer and open the shared state. Rejects without WebGL2. */
   async start(): Promise<void> {
     const p = this.projversor;
-    await p.init();
+    // Layers published since this build; the bundled ones when offline.
+    await Promise.all([p.init(), loadLayers()]);
     this.compass.locked = p.view.northLocked;
     this.buildPickers(p.view.preset.id);
     this.bindRenderer();
@@ -144,7 +170,7 @@ class ProjectionDemo {
       tint:
         shared.tint === ""
           ? null
-          : isTintEntry(shared.tint)
+          : isTintFor(layer, shared.tint)
             ? shared.tint
             : undefined,
       style: shared.style,
@@ -222,7 +248,7 @@ class ProjectionDemo {
   /** Month, layer, tint, speed and palette pickers for the open layer. */
   private syncLayer(field: FieldLayerHandle): void {
     const layer = field.source;
-    const { month, tint, tintField, speed, palette } = this.ui;
+    const { month, tintField, speed, palette } = this.ui;
     month.replaceChildren(
       ...field.chunks.map(
         (chunk, i) =>
@@ -236,10 +262,19 @@ class ProjectionDemo {
     this.ui.provider.textContent = providerLabel(
       field.chunks[0]?.provenance?.provider,
     );
-    this.ui.layer.value = layer.id;
+    this.layerPicker.value = layer.id;
     tintField.hidden = layer.kind !== "vector";
     this.gradePanel.available = layer.kind === "vector";
-    tint.value = field.tint ?? "";
+    this.tintPicker.setItems([
+      {
+        id: "",
+        label: "Speed",
+        detail: "Brightness and color by speed",
+        group: "Particle color",
+      },
+      ...tintLayersFor(layer).map((l) => pickItem(l, "Color by", l.entryId)),
+    ]);
+    this.tintPicker.value = field.tint ?? "";
     speed.replaceChildren(
       ...SPEEDS[layer.kind].map((s) => new Option(`${s}×`, String(s))),
     );
@@ -251,42 +286,27 @@ class ProjectionDemo {
   }
 
   private buildPickers(activePreset: string): void {
-    const { projection, layer, tint } = this.ui;
+    const { projection } = this.ui;
     projection.replaceChildren(
       ...PRESETS.map((preset) => new Option(preset.label, preset.id)),
     );
     projection.value = activePreset;
     this.ui.projectionName.textContent = projection.selectedOptions[0].text;
-    layer.replaceChildren(
-      optionGroup("Flows", PROJVERSOR_LAYERS, "vector"),
-      optionGroup("Fields", PROJVERSOR_LAYERS, "scalar"),
-    );
-    tint.replaceChildren(
-      new Option("Speed", ""),
-      ...TINT_LAYERS.map((l) => new Option(l.label, l.entryId)),
+    this.layerPicker.setItems(
+      PROJVERSOR_LAYERS.map((l) =>
+        pickItem(l, l.kind === "vector" ? "Flows" : undefined),
+      ),
     );
   }
 
   private bindControls(): void {
     const p = this.projversor;
-    const { projection, layer, tint, month, speed, palette } = this.ui;
+    const { projection, month, speed, palette } = this.ui;
     const run = (task: Promise<void>) =>
       task.catch((error: unknown) => this.fail(error));
     projection.addEventListener("change", () => {
       if (findPreset(projection.value)) {
         p.view.goTo({ preset: projection.value });
-      }
-    });
-    layer.addEventListener("change", () => {
-      const next = findLayer(layer.value);
-      if (next) {
-        void run(this.open(next, { frame: true }));
-      }
-    });
-    tint.addEventListener("change", () => {
-      const field = this.field;
-      if (field) {
-        void run(this.open(field.source, { tint: tint.value || null }));
       }
     });
     month.addEventListener("change", () => {
@@ -462,19 +482,36 @@ class ProjectionDemo {
   }
 }
 
-function optionGroup(
-  label: string,
-  layers: readonly ProjversorLayer[],
-  kind: ProjversorLayer["kind"],
-): HTMLOptGroupElement {
-  const group = document.createElement("optgroup");
-  group.label = label;
-  group.append(
-    ...layers
-      .filter((l) => l.kind === kind)
-      .map((l) => new Option(l.label, l.id)),
-  );
-  return group;
+const CATEGORY_LABELS: Record<string, string> = {
+  ocean: "Ocean",
+  atmosphere: "Atmosphere",
+  biology: "Ocean biology",
+  ice: "Sea ice",
+  waves: "Waves",
+  land: "Land",
+  coast: "Coast",
+  freshwater: "Lakes",
+};
+
+/**
+ * A layer as a picker choice, listed under `group` or its category. Tint
+ * choices pass the entry id as `id`, as the field and share links hold it.
+ */
+function pickItem(
+  layer: ProjversorLayer,
+  group?: string,
+  id = layer.id,
+): PickItem {
+  const category = CATEGORY_LABELS[layer.category] ?? layer.category;
+  return {
+    id,
+    label: layer.label,
+    detail: [group ? category : undefined, layer.provider]
+      .filter(Boolean)
+      .join(" · "),
+    group: group ?? category,
+    search: layerSearchText(layer),
+  };
 }
 
 function providerLabel(provider: string | undefined): string {
