@@ -1,5 +1,6 @@
 #version 300 es
 precision mediump float;
+precision highp sampler2D;
 
 // zartigl's glow.frag.glsl: the trails gathered into the glow texture,
 // GLOW_SCALE× smaller.

@@ -1,5 +1,6 @@
 #version 300 es
 precision highp float;
+precision highp sampler2D;
 
 // zartigl's fade.frag.glsl: dim the previous screen; opacity 1 blits it.
 uniform sampler2D u_screen;

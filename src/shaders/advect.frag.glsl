@@ -1,5 +1,7 @@
 #version 300 es
 precision highp float;
+precision highp int;
+precision highp sampler2D;
 
 #include ./velocity.glsl;
 /// @zartigl RANDOM_GLSL

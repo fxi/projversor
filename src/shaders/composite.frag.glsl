@@ -1,5 +1,6 @@
 #version 300 es
 precision highp float;
+precision highp sampler2D;
 
 // zartigl's composite.frag.glsl: the trails at opacity 1, with the optional
 // glow and color grade. Off, colors pass unchanged.
