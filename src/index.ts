@@ -26,6 +26,8 @@ export type { OverlayColors } from "./Overlay";
 export { TRANSITION_MS, VIEW_MS, clampZoom } from "./Camera";
 export type { ProjversorViewTarget } from "./Camera";
 export { SPEEDS } from "./Clock";
+export { comparePanels, gridShape, parseCompare, shiftYears } from "./compare";
+export type { CompareConfig, ComparePanel, PanelView, Rect } from "./compare";
 export type { ProjversorMonth } from "./FieldLayer";
 export { PRESETS, findPreset } from "./presets";
 export type { Preset } from "./presets";

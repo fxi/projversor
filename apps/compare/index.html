@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>projversor · compare</title>
+    <link rel="icon" href="data:," />
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #030409;
+        color: #eef2ea;
+        font:
+          14px/1.4 system-ui,
+          sans-serif;
+      }
+      #map {
+        position: fixed;
+        inset: 0;
+        /* Overlay colors, read by projversor at init(). */
+        --ocean: #0b1418;
+        --land: #0d0d0f;
+        --coast: rgba(200, 200, 200, 0.55);
+        --outline: rgba(255, 255, 255, 0.18);
+        --graticule: rgba(255, 255, 255, 0.08);
+        --equator: rgba(253, 231, 37, 0.35);
+        /* Comparison labels and divider. */
+        --compare-handle: #fde725;
+      }
+      #controls {
+        position: fixed;
+        left: 16px;
+        bottom: 16px;
+        display: grid;
+        gap: 10px;
+        max-width: calc(100vw - 32px);
+        padding: 12px 14px;
+        border-radius: 6px;
+        background: rgba(3, 4, 9, 0.78);
+        backdrop-filter: blur(6px);
+      }
+      #controls .row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+      }
+      #controls button {
+        padding: 5px 10px;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 4px;
+        color: inherit;
+        background: transparent;
+        font: inherit;
+        cursor: pointer;
+      }
+      #controls button[aria-pressed="true"] {
+        border-color: #fde725;
+        color: #fde725;
+      }
+      #controls button:focus-visible,
+      #controls input:focus-visible {
+        outline: 2px solid #fde725;
+        outline-offset: 2px;
+      }
+      #progress {
+        width: min(260px, 60vw);
+        accent-color: #fde725;
+      }
+      #date {
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.06em;
+      }
+      #status {
+        color: #93a39a;
+        min-height: 1.4em;
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div id="controls">
+      <div class="row" role="group" aria-label="Layout">
+        <button type="button" data-layout="none">Plain</button>
+        <button type="button" data-layout="swipe">Swipe 2026 | 2015</button>
+        <button type="button" data-layout="grid">Grid of four El Niño</button>
+      </div>
+      <div class="row">
+        <label for="progress">Progress</label>
+        <input id="progress" type="range" min="0" max="1" step="0.01" />
+        <button type="button" id="projection" aria-pressed="true">
+          Flat cells
+        </button>
+      </div>
+      <div class="row">
+        <button type="button" id="play">Pause</button>
+        <span id="date"></span>
+      </div>
+      <p id="status" role="status"></p>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

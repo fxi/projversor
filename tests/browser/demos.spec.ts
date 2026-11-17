@@ -63,3 +63,25 @@ test("minimal demo shows its field and regions", async ({ page }) => {
   await expect(page.locator("#status")).toHaveText("");
   expect(errors).toEqual([]);
 });
+
+test("compare demo swipes, then morphs into a grid", async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto(demoUrl("compare"));
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-ready",
+    "true",
+    LOAD,
+  );
+  const handle = page.locator('[data-projversor="compare-handle"]');
+  await expect(handle).toBeVisible(LOAD);
+  await handle.focus();
+  await page.keyboard.press("Home");
+  await expect(handle).toHaveAttribute("aria-valuenow", "0");
+  await page.locator('[data-layout="grid"]').click();
+  await expect(handle).toBeHidden(LOAD);
+  await expect(
+    page.locator('[data-projversor="compare-label"]', { hasText: "1997" }),
+  ).toBeVisible(LOAD);
+  await expect(page.locator("#status")).toHaveText("", LOAD);
+  expect(errors).toEqual([]);
+});

@@ -50,6 +50,13 @@ export function parseOverlayColors(
   return value as Partial<OverlayColors>;
 }
 
+/** A view drawn into a clip rect (css px; null: the whole canvas), faded. */
+export interface OverlayPanel {
+  frame: ViewFrame;
+  clip: { x: number; y: number; width: number; height: number } | null;
+  alpha: number;
+}
+
 const SPHERE: GeoPermissibleObjects = { type: "Sphere" };
 const GRATICULE = geoGraticule10();
 const EQUATOR: GeoPermissibleObjects = {
@@ -138,14 +145,36 @@ export class Overlay {
       .precision(0.4);
   }
 
-  draw(frame: ViewFrame, dpr: number, detailed: boolean): void {
-    this.setView(frame);
-    const { width, height } = frame;
+  /**
+   * Draw the backdrop and the lines of each panel, clipped to it and faded;
+   * a single full panel for the plain view.
+   */
+  draw(panels: readonly OverlayPanel[], dpr: number, detailed: boolean): void {
     for (const ctx of [this.back, this.front]) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, width, height);
+      ctx.clearRect(0, 0, ctx.canvas.width / dpr, ctx.canvas.height / dpr);
     }
+    for (const { frame, clip, alpha } of panels) {
+      if (alpha <= 0 || (clip && (clip.width <= 0 || clip.height <= 0))) {
+        continue;
+      }
+      for (const ctx of [this.back, this.front]) {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        if (clip) {
+          ctx.beginPath();
+          ctx.rect(clip.x, clip.y, clip.width, clip.height);
+          ctx.clip();
+        }
+      }
+      this.drawPanel(frame, detailed);
+      this.back.restore();
+      this.front.restore();
+    }
+  }
 
+  private drawPanel(frame: ViewFrame, detailed: boolean): void {
+    this.setView(frame);
     const land =
       detailed && this.layers.landDetail
         ? this.layers.landDetail

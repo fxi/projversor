@@ -1,6 +1,7 @@
 import { parseLayerStyle, type LayerStyleInput } from "@fxi/zartigl/catalog";
 import { parseTimeRange, type TimeRange } from "@fxi/zartigl/engine";
 import { SPEEDS } from "./Clock";
+import { parseCompare, type CompareConfig } from "./compare";
 import { STYLE_SUPPORT } from "./FieldLayer";
 import { parseGeoJSONLayer, type GeoJSONLayer } from "./geojson";
 import { findLayer, isTintEntry, layerPalettes, preloadLayer } from "./layers";
@@ -75,6 +76,11 @@ export interface ProjversorViewConfig {
   coastlines?: boolean;
   /** GeoJSON drawn above the layers during this view, e.g. named regions. */
   geojson?: GeoJSONLayer;
+  /**
+   * The layers side by side at other years: a swipe or a grid (see
+   * {@link CompareConfig}). A view without one folds the previous back.
+   */
+  compare?: CompareConfig;
 }
 
 /** Keys of a stack entry: also the flat keys of a single layer. */
@@ -94,6 +100,7 @@ const KEYS = new Set([
   "coastlines",
   "geojson",
   "layers",
+  "compare",
 ]);
 
 /** Flat keys of the first view format, and where they moved. */
@@ -286,6 +293,9 @@ export function parseProjversorView(
   if (config.geojson !== undefined) {
     parseGeoJSONLayer(config.geojson, `${path}.geojson`);
   }
+  if (config.compare !== undefined) {
+    parseCompare(config.compare, `${path}.compare`);
+  }
   // The parsed styles: legacy palettes read as their replacement (heat-alert).
   // The bottom layer is mirrored flat, for the single-layer state.
   return {
@@ -423,6 +433,7 @@ export class ProjversorStoryView {
       animate: this.animate,
       durationMs: config.transitionMs,
       coastlines: config.coastlines ?? true,
+      compare: config.compare ?? null,
     });
     const { layers } = config;
     const shown = this.layers;

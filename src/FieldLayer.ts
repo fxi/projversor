@@ -71,6 +71,7 @@ export const STYLE_SUPPORT = {
   raster: [
     "opacity",
     "vibrance",
+    "colorDomain",
     "alphaFadeLow",
     "alphaFadeHigh",
     "alphaFadeCurve",
@@ -182,6 +183,9 @@ export class FieldLayer {
   private backdrop: [number, number, number, number] = [0, 0, 0, 0];
   private rasterOpacity = 1;
   private rasterVibrance = 0;
+  /** Style's color domain over the archive's own, or null. */
+  private rasterDomain: [number, number] | null = null;
+  private revisionValue = 0;
   private field: GeoVideoField | null = null;
   private tint: GeoVideoField | null = null;
   private tintIdValue: string | null = null;
@@ -214,6 +218,11 @@ export class FieldLayer {
    * advances through them. Other layers follow the playhead.
    */
   driving = true;
+  /**
+   * Time a follower shows for the playhead, e.g. the same day another year;
+   * the driving layer always shows the playhead.
+   */
+  timeShift: (ms: number) => number = (ms) => ms;
 
   constructor(
     private readonly gl: WebGL2RenderingContext,
@@ -258,6 +267,22 @@ export class FieldLayer {
   /** Style override of the current view. */
   get viewStyle(): LayerStyleInput {
     return this.viewStyleValue;
+  }
+
+  /** Bumped when the layer, its style or its palette change. */
+  get revision(): number {
+    return this.revisionValue;
+  }
+
+  /** Values mapped onto the ramp: the style's, else the archive's. */
+  get domain(): [number, number] | null {
+    return this.rasterDomain ?? this.field?.domain ?? null;
+  }
+
+  /** The time this layer shows: the playhead, shifted for a follower. */
+  get shownTime(): number {
+    const ms = this.clock.ms;
+    return this.driving ? ms : this.timeShift(ms);
   }
 
   /** Playback speed multiplier of the open layer. */
@@ -524,7 +549,7 @@ export class FieldLayer {
     if (this.following && this.followingId === this.loadId) {
       return this.following;
     }
-    const ms = this.clock.ms;
+    const ms = this.shownTime;
     const times = this.times;
     if (
       this.driving ||
@@ -709,6 +734,10 @@ export class FieldLayer {
     this.particleSettings = style.particles;
     this.rasterOpacity = style.raster.opacity;
     this.rasterVibrance = style.raster.vibrance;
+    this.rasterDomain = style.raster.colorDomain
+      ? [...style.raster.colorDomain]
+      : null;
+    this.revisionValue++;
     this.backdrop = backdropVec4(style.particles.backdrop);
     this.trailFade.setBase(fadeToOpacity(style.particles.fade));
     // Paused particles redraw their trails with the new style.
@@ -761,6 +790,7 @@ export class FieldLayer {
     this.paletteId = id;
     this.ramp = createColorRampTexture(this.gl, id, this.rampOptionsValue);
     this.settle = this.settleFrames();
+    this.revisionValue++;
     this.host.emit("palette", { palette: id, ramp: this.rampOptionsValue });
   }
 
@@ -779,11 +809,17 @@ export class FieldLayer {
     );
   }
 
+  /** True for a vector layer drawn as particles. */
+  get vector(): boolean {
+    return this.layerValue.kind === "vector";
+  }
+
   /**
    * Draw the open field as particles or a raster into the bound GL canvas.
-   * `moving`: the camera moved within the last moments.
+   * `moving`: the camera moved within the last moments. `alpha` fades a
+   * raster, e.g. a comparison panel growing in.
    */
-  draw(frame: ViewFrame, now: number, moving: boolean): void {
+  draw(frame: ViewFrame, now: number, moving: boolean, alpha = 1): void {
     const field = this.field;
     if (!field || !this.ramp) {
       return;
@@ -791,10 +827,10 @@ export class FieldLayer {
     if (field.vector) {
       this.drawParticles(frame, field, this.ramp, now, moving);
     } else {
-      this.raster.draw(frame, field, this.clock.ms, {
+      this.raster.draw(frame, field, this.shownTime, {
         ramp: this.ramp,
-        domain: field.domain,
-        opacity: this.rasterOpacity,
+        domain: this.rasterDomain ?? field.domain,
+        opacity: this.rasterOpacity * alpha,
         vibrance: this.rasterVibrance,
       });
     }
@@ -813,7 +849,7 @@ export class FieldLayer {
     moving: boolean,
   ): void {
     const gl = this.gl;
-    const ms = this.clock.ms;
+    const ms = this.shownTime;
     if (moving || (!this.driving && ms !== this.lastMs)) {
       // A follower redraws its trails when another layer moved the playhead.
       this.settle = this.settleFrames();

@@ -5,11 +5,12 @@ import { Camera, type Rotate } from "./Camera";
 import { Clock } from "./Clock";
 import type { Emitter } from "./emitter";
 import type { GeoJSONLayer } from "./geojson";
-import { Overlay, type OverlayColors } from "./Overlay";
+import { Overlay, type OverlayColors, type OverlayPanel } from "./Overlay";
 import type { Preset } from "./presets";
 import { SphereParticles } from "./SphereParticles";
 import { SphereScalar } from "./SphereScalar";
-import { viewFrame, type ViewFrame } from "./view";
+import type { Rect } from "./compare";
+import { viewFrame, type View, type ViewFrame } from "./view";
 
 /** The camera counts as moving until its view rests this long. */
 const MOVE_SETTLE_MS = 100;
@@ -41,12 +42,34 @@ export interface StageInitial {
   colors?: Partial<OverlayColors>;
 }
 
+/** A panel of a comparison, as the stage draws it. */
+export interface StagePanel {
+  index: number;
+  frame: ViewFrame;
+  /** Css px the panel draws into. */
+  clip: Rect;
+  alpha: number;
+}
+
 /** What the frame loop runs for the layers, in order. */
 export interface StageHooks {
   /** Advance the playhead by `dt` seconds. */
   advance(dt: number): void;
-  /** Draw into the cleared GL canvas; `moving`: the view just moved. */
-  draw(frame: ViewFrame, now: number, moving: boolean): void;
+  /**
+   * Panels of a comparison over the camera's view, or null for the plain
+   * view; called once per frame, after the camera moved.
+   */
+  panels?(view: View, now: number): StagePanel[] | null;
+  /**
+   * Draw into the cleared GL canvas; `moving`: the view just moved;
+   * `panels`: the comparison's, when one shows.
+   */
+  draw(
+    frame: ViewFrame,
+    now: number,
+    moving: boolean,
+    panels: StagePanel[] | null,
+  ): void;
 }
 
 const landFeature = (topology: unknown) => {
@@ -188,37 +211,66 @@ export class Stage {
     this.camera.animate(now);
     this.hooks.advance(dt);
     const frame = viewFrame(this.camera.view);
-    this.drawOverlay(frame, now);
+    const panels = this.hooks.panels?.(this.camera.view, now) ?? null;
+    this.drawOverlay(panels ?? [{ frame, clip: null, alpha: 1 }], now);
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    this.hooks.draw(frame, now, now - this.lastMove < MOVE_SETTLE_MS);
+    this.hooks.draw(frame, now, now - this.lastMove < MOVE_SETTLE_MS, panels);
+    this.scissor(null);
     this.events.emit("frame", undefined);
     this.frameId = requestAnimationFrame((t) => this.tick(t));
   }
 
+  /**
+   * Limit GL drawing to `clip` (css px, origin top left), or lift the limit.
+   * Scissoring holds across the viewport resets of the renderers.
+   */
+  scissor(clip: Rect | null): void {
+    const gl = this.gl;
+    if (!clip) {
+      gl.disable(gl.SCISSOR_TEST);
+      return;
+    }
+    const sx = gl.drawingBufferWidth / Math.max(1, this.camera.view.width);
+    const sy = gl.drawingBufferHeight / Math.max(1, this.camera.view.height);
+    const x = Math.round(clip.x * sx);
+    const y = Math.round((this.camera.view.height - clip.y - clip.height) * sy);
+    gl.enable(gl.SCISSOR_TEST);
+    gl.scissor(
+      x,
+      y,
+      Math.max(0, Math.round((clip.x + clip.width) * sx) - x),
+      Math.max(0, Math.round((this.camera.view.height - clip.y) * sy) - y),
+    );
+  }
+
   /** Coastlines and graticule: coarse while the view moves, then detailed. */
-  private drawOverlay(frame: ViewFrame, now: number): void {
-    const key = JSON.stringify([
-      frame.rotate,
-      frame.zoom,
-      frame.blend.t,
-      frame.blend.a.id,
-      frame.blend.b.id,
-      frame.width,
-      frame.height,
-      frame.inset,
-    ]);
+  private drawOverlay(panels: readonly OverlayPanel[], now: number): void {
+    const key = JSON.stringify(
+      panels.map(({ frame, clip, alpha }) => [
+        frame.rotate,
+        frame.zoom,
+        frame.blend.t,
+        frame.blend.a.id,
+        frame.blend.b.id,
+        frame.width,
+        frame.height,
+        frame.inset,
+        clip,
+        alpha,
+      ]),
+    );
     if (key !== this.overlayKey) {
       this.overlayKey = key;
       this.lastMove = now;
       this.detailed = false;
-      this.overlay.draw(frame, this.dpr, false);
+      this.overlay.draw(panels, this.dpr, false);
     } else if (!this.detailed && now - this.lastMove > 180) {
       this.detailed = true;
-      this.overlay.draw(frame, this.dpr, true);
+      this.overlay.draw(panels, this.dpr, true);
     }
   }
 

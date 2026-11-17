@@ -34,6 +34,17 @@ describe("parseProjversorView", () => {
     );
   });
 
+  it("accepts a comparison and rejects a malformed one with its path", () => {
+    const compare = {
+      layout: "swipe",
+      panels: [{ yearOffset: 0 }, { yearOffset: -11, label: "2015" }],
+    };
+    expect(parseProjversorView(view({ compare })).compare).toEqual(compare);
+    expect(() =>
+      parseProjversorView(view({ compare: { ...compare, layout: "stack" } })),
+    ).toThrow("views.probe.config.compare.layout");
+  });
+
   it("accepts GeoJSON regions and rejects malformed ones with their path", () => {
     const geojson = {
       data: { type: "Point", coordinates: [0, 0] },

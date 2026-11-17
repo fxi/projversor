@@ -8,6 +8,7 @@ export const DEMOS = {
   story: { port: 5182, path: "/projversor/story/" },
   site: { port: 5183, path: "/" },
   minimal: { port: 5184, path: "/projversor/minimal/" },
+  compare: { port: 5185, path: "/projversor/compare/" },
 } as const;
 
 export const demoUrl = (name: keyof typeof DEMOS) =>

@@ -1,5 +1,6 @@
 # The projversor apps served as static files by nginx: the explorer at /,
-# the story at /story/, the site at /site/ and the minimal page at /minimal/.
+# the story at /story/, the site at /site/, the minimal page at /minimal/
+# and the comparisons at /compare/.
 
 FROM --platform=$BUILDPLATFORM node:22-alpine AS build
 WORKDIR /src
@@ -9,7 +10,8 @@ COPY . .
 RUN npx vite build --config apps/explorer/vite.config.ts --base / \
  && npx vite build --config apps/story/vite.config.ts --base /story/ \
  && npx vite build --config apps/site/vite.config.ts \
- && npx vite build --config apps/minimal/vite.config.ts --base /minimal/
+ && npx vite build --config apps/minimal/vite.config.ts --base /minimal/ \
+ && npx vite build --config apps/compare/vite.config.ts --base /compare/
 
 FROM nginxinc/nginx-unprivileged:alpine-slim
 LABEL org.opencontainers.image.title="projversor" \
@@ -21,4 +23,5 @@ COPY --from=build /src/dist-apps/explorer /usr/share/nginx/html
 COPY --from=build /src/dist-apps/story /usr/share/nginx/html/story
 COPY --from=build /src/dist-apps/site /usr/share/nginx/html/site
 COPY --from=build /src/dist-apps/minimal /usr/share/nginx/html/minimal
+COPY --from=build /src/dist-apps/compare /usr/share/nginx/html/compare
 EXPOSE 8080

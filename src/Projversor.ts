@@ -7,7 +7,9 @@ import {
   type ColorGrade,
   type TimeRange,
 } from "@fxi/zartigl/engine";
-import { clampZoom, type Camera, type Rotate } from "./Camera";
+import { TRANSITION_MS, clampZoom, type Camera, type Rotate } from "./Camera";
+import { parseCompare, type CompareConfig } from "./compare";
+import { Comparison } from "./comparison";
 import { Emitter } from "./emitter";
 import {
   FieldLayer,
@@ -122,6 +124,11 @@ export interface ProjversorState {
   colors?: Partial<OverlayColors>;
   /** Show generalized coastlines; omitted keeps their visibility. */
   coastlines?: boolean;
+  /**
+   * Compare the layers at other years, side by side; null folds the
+   * comparison back. Eased like the view unless `animate` is false.
+   */
+  compare?: CompareConfig | null;
 }
 
 /** Events and their payloads. */
@@ -132,6 +139,8 @@ export interface ProjversorEvents extends StageEvents {
   month: { id: string; month: ProjversorMonth };
   /** `ramp`: how it is drawn, reversed and faded; pass it to `rampGradient`. */
   palette: { id: string; palette: string; ramp: RampOptions };
+  /** The swipe divider was dragged or keyed, 0–1 across the free zone. */
+  compare: { divider: number };
 }
 
 /** The view controls of a projversor. */
@@ -219,6 +228,11 @@ export class FieldLayerHandle {
   /** Playback speed multiplier of the source's kind. */
   get speed(): number {
     return this.field.speed;
+  }
+
+  /** Values mapped onto the ramp: the style's color domain, else the archive's; null before a month shows. */
+  get domain(): [number, number] | null {
+    return this.field.domain;
   }
 
   /** Time window playback loops over, or null for the whole archive. */
@@ -352,6 +366,7 @@ export class Projversor {
   private readonly events = new Emitter<ProjversorEvents>();
   private readonly layers = new Map<string, Entry>();
   private stage: Stage | null = null;
+  private comparison: Comparison | null = null;
   private detach: (() => void) | null = null;
   private canvases: HTMLCanvasElement[] = [];
   private destroyed = false;
@@ -407,17 +422,61 @@ export class Projversor {
     if (this.options.time !== undefined) {
       stage.clock.ms = this.options.time;
     }
+    const comparison = new Comparison(
+      root,
+      front,
+      () =>
+        new FieldLayer(
+          stage.gl,
+          stage.clock,
+          stage.particles,
+          stage.raster,
+          { emit: () => {} },
+          gradeToColorGrade(undefined),
+        ),
+      (divider) => this.events.emit("compare", { divider }),
+    );
+    this.comparison = comparison;
     stage.start({
       advance: (dt) => this.driver()?.advanceTime(dt),
-      draw: (frame, now, moving) => {
-        for (const { field, image } of this.layers.values()) {
-          if (field) {
-            field.follow();
-            field.draw(frame, now, moving);
-          } else if (image) {
-            image.sphere.draw(frame, image.opacity);
+      panels: (view, now) => comparison.panels(view, now),
+      draw: (frame, now, moving, panels) => {
+        if (!panels) {
+          for (const { field, image } of this.layers.values()) {
+            if (field) {
+              field.follow();
+              field.draw(frame, now, moving);
+            } else if (image) {
+              image.sphere.draw(frame, image.opacity);
+            }
+          }
+          return;
+        }
+        const fields = this.fields();
+        comparison.prune(fields);
+        fields.forEach((field) => field.follow());
+        for (const panel of panels) {
+          if (
+            panel.alpha <= 0 ||
+            panel.clip.width < 1 ||
+            panel.clip.height < 1
+          ) {
+            continue;
+          }
+          stage.scissor(panel.clip);
+          for (const { field, image } of this.layers.values()) {
+            if (field) {
+              const layer = comparison.layerFor(field, panel.index);
+              if (layer && layer !== field) {
+                layer.follow();
+              }
+              layer?.draw(panel.frame, now, moving, panel.alpha);
+            } else if (image) {
+              image.sphere.draw(panel.frame, image.opacity * panel.alpha);
+            }
           }
         }
+        stage.scissor(null);
       },
     });
     if (this.options.interactive ?? true) {
@@ -720,6 +779,14 @@ export class Projversor {
     if (state.colors !== undefined) {
       stage.setColors(parseOverlayColors(state.colors, "projversor colors"));
     }
+    if (state.compare !== undefined) {
+      this.comparison?.set(
+        state.compare === null
+          ? null
+          : parseCompare(state.compare, "projversor compare"),
+        animate ? (durationMs ?? TRANSITION_MS) : 0,
+      );
+    }
     if (state.playing !== undefined) {
       stage.clock.setPlaying(state.playing);
     }
@@ -743,12 +810,35 @@ export class Projversor {
     }
   }
 
+  /** The comparison shown, and how far it is from the plain view (0–1). */
+  get compare(): { config: CompareConfig; progress: number } | null {
+    const config = this.comparison?.config;
+    return config && this.comparison
+      ? { config, progress: this.comparison.progress }
+      : null;
+  }
+
+  /**
+   * Show the comparison at `progress` (0: plain view, 1: comparison) at
+   * once, e.g. scrubbed by a scroll position. No-op without a comparison.
+   */
+  setCompareProgress(progress: number): void {
+    this.comparison?.setProgress(progress);
+  }
+
+  /** Move the swipe divider, 0–1 across the free zone. */
+  setCompareDivider(divider: number): void {
+    this.comparison?.setDivider(divider);
+  }
+
   /** Stop drawing, free the GL resources and remove the canvases. */
   destroy(): void {
     if (this.destroyed) {
       return;
     }
     this.destroyed = true;
+    this.comparison?.destroy();
+    this.comparison = null;
     for (const { field, image } of this.layers.values()) {
       field?.destroy();
       image?.sphere.destroy();
