@@ -33,11 +33,11 @@ const grid = (flat: boolean): CompareConfig => ({
     { yearOffset: 0, label: "2026" },
   ],
   gap: 2,
-  ...(flat ? { preset: "plate", rotate: [150, 0, 0], zoom: 2.1 } : {}),
+  ...(flat ? { preset: "globe", rotate: [150, 0, 0], zoom: 1 } : {}),
 });
 
 const pv = new Projversor(map, {
-  preset: "globe",
+  preset: "plate",
   rotate: [140, -5, 0],
   zoom: 1.1,
 });
