@@ -1,0 +1,1105 @@
+/*
+ * @fxi/projversor/story: the scroll story around one projversor sphere.
+ * Scoped to .zs-story. Theme it by overriding the custom properties below
+ * on a more specific selector, e.g. ".my-site .zs-story { --zs-accent: … }".
+ */
+
+@property --zs-veil-angle {
+  syntax: "<angle>";
+  inherits: true;
+  initial-value: 180deg;
+}
+
+@property --zs-veil-solid {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 22%;
+}
+
+@property --zs-veil-clear {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 58%;
+}
+
+.zs-story {
+  --zs-bg: #030409;
+  --zs-band: #000;
+  --zs-ink: #f2f1ee;
+  --zs-muted: #8b8f9c;
+  --zs-line: rgba(255, 255, 255, 0.14);
+  --zs-accent: #7fd4ff;
+  --zs-gutter: clamp(16px, 4vw, 56px);
+  --zs-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --zs-sans: "Inter Tight Variable", "Inter Tight", system-ui, sans-serif;
+  /* Read by the projversor overlay: black sea and land, grey lines. */
+  --ocean: #000;
+  --land: #000;
+  --coast: rgba(170, 170, 170, 0.55);
+  --outline: rgba(255, 255, 255, 0.18);
+  --graticule: rgba(255, 255, 255, 0.11);
+  --equator: rgba(255, 196, 92, 0.45);
+  color-scheme: dark;
+  font-family: var(--zs-sans);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  color: var(--zs-ink);
+}
+
+.zs-story *,
+.zs-story *::before,
+.zs-story *::after {
+  box-sizing: border-box;
+}
+
+/* Low specificity: component rules below win over these resets. */
+:where(.zs-story) a {
+  color: inherit;
+}
+
+:where(.zs-story) button {
+  font: inherit;
+  color: inherit;
+}
+
+/* Small caps-like labels: the kicker of a step. */
+.zs-story .zs-kicker {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+/* ---- story ------------------------------------------------------------- */
+
+.zs-story {
+  position: relative;
+  background: var(--zs-bg);
+}
+
+.zs-stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100svh;
+  overflow: hidden;
+}
+
+.zs-stage > canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/*
+ * One full-screen gradient from the solid text side to the clear map side.
+ * Its angle and stops are registered properties, so layouts crossfade.
+ */
+.zs-veil {
+  --fade: calc(var(--zs-veil-clear) - var(--zs-veil-solid));
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    var(--zs-veil-angle),
+    var(--zs-bg) var(--zs-veil-solid),
+    color-mix(in srgb, var(--zs-bg) 82%, transparent)
+      calc(var(--zs-veil-solid) + var(--fade) * 0.18),
+    color-mix(in srgb, var(--zs-bg) 50%, transparent)
+      calc(var(--zs-veil-solid) + var(--fade) * 0.45),
+    color-mix(in srgb, var(--zs-bg) 18%, transparent)
+      calc(var(--zs-veil-solid) + var(--fade) * 0.75),
+    transparent var(--zs-veil-clear)
+  );
+  transition:
+    --zs-veil-angle 1100ms var(--zs-ease),
+    --zs-veil-solid 1100ms var(--zs-ease),
+    --zs-veil-clear 1100ms var(--zs-ease);
+}
+
+.zs-story[data-layout="intro"] {
+  --zs-veil-angle: 180deg;
+  --zs-veil-solid: 4%;
+  --zs-veil-clear: 46%;
+}
+
+.zs-story[data-layout="left"] {
+  --zs-veil-angle: 90deg;
+  --zs-veil-solid: 26%;
+  --zs-veil-clear: 56%;
+}
+
+.zs-story[data-layout="stage"] {
+  --zs-veil-angle: 180deg;
+  --zs-veil-solid: 0%;
+  --zs-veil-clear: 0%;
+}
+
+/* Comparison handle and year labels of projversor, in the scene's accent. */
+.zs-stage {
+  --compare-handle: var(--zs-accent);
+  --compare-line: color-mix(in srgb, var(--zs-ink) 85%, transparent);
+  --compare-label: color-mix(in srgb, var(--zs-bg) 70%, transparent);
+  --compare-ink: var(--zs-ink);
+}
+
+.zs-story[data-layout="right"] {
+  --zs-veil-angle: 270deg;
+  --zs-veil-solid: 26%;
+  --zs-veil-clear: 56%;
+}
+
+.zs-status {
+  position: absolute;
+  left: var(--zs-gutter);
+  bottom: 20px;
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--zs-muted);
+}
+
+.zs-story.is-loading .zs-status {
+  animation: zs-pulse 1.6s ease-in-out infinite;
+}
+
+/* ---- progress: one line, the step above, the count below ------------- */
+
+/* Below the sticky header, always on the right: the text keeps clear of it. */
+.zs-progress {
+  --zs-rail: 28px;
+  --track: calc(56svh - var(--zs-header-h, 0px));
+  position: absolute;
+  top: calc(50% + var(--zs-header-h, 0px) / 2);
+  right: calc(var(--zs-gutter) * 0.6);
+  z-index: 2;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  transform: translateY(-50%);
+  font-variant-numeric: tabular-nums;
+}
+
+.zs-progress-now {
+  position: relative;
+  height: 1.2em;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--zs-accent);
+  transition: color 600ms var(--zs-ease);
+}
+
+.zs-progress-n {
+  display: block;
+  min-width: 2ch;
+  text-align: center;
+}
+
+/* The chapter name flashes beside the number when the step changes. */
+.zs-progress-name {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 14px);
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--zs-ink);
+  text-shadow: 0 0 10px var(--zs-bg);
+  opacity: 0;
+  transform: translate(8px, -50%);
+  transition:
+    opacity 500ms var(--zs-ease),
+    transform 500ms var(--zs-ease);
+  pointer-events: none;
+}
+
+.zs-progress.is-named .zs-progress-name,
+.zs-progress:hover .zs-progress-name {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+.zs-progress-track {
+  position: relative;
+  width: 9px;
+  height: var(--track);
+  cursor: pointer;
+}
+
+.zs-progress-track::before,
+.zs-progress-fill {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 0;
+  width: 1px;
+  height: 100%;
+}
+
+.zs-progress-track::before {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.zs-progress-fill {
+  width: 2px;
+  left: 3.5px;
+  background: var(--zs-accent);
+  transform: scaleY(0);
+  transform-origin: top;
+  transition: background 600ms var(--zs-ease);
+}
+
+.zs-progress-tick {
+  position: absolute;
+  left: 2px;
+  width: 5px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* Scroll invitation: a short segment running down the empty line. */
+.zs-progress-nudge {
+  position: absolute;
+  left: 3.5px;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 600ms var(--zs-ease);
+}
+
+.zs-progress-nudge::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 14%;
+  background: linear-gradient(transparent, var(--zs-accent));
+  animation: zs-run 2.4s var(--zs-ease) infinite;
+}
+
+.zs-progress.is-nudging .zs-progress-nudge {
+  opacity: 1;
+}
+
+.zs-progress-total {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--zs-muted);
+}
+
+/* Beside the top of the line, where the nudge runs. */
+.zs-progress-cue {
+  position: absolute;
+  top: 14px;
+  right: calc(50% + 10px);
+  margin: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
+  color: var(--zs-ink);
+  opacity: 0;
+  transition: opacity 600ms var(--zs-ease);
+  pointer-events: none;
+}
+
+.zs-progress.is-nudging .zs-progress-cue {
+  opacity: 0.8;
+}
+
+/* Step buttons at both ends: one scene back or on, or to the first or last. */
+.zs-progress-step {
+  display: grid;
+  place-items: center;
+  width: var(--zs-rail);
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--zs-accent);
+  cursor: pointer;
+  transition:
+    color 600ms var(--zs-ease),
+    opacity 300ms var(--zs-ease);
+}
+
+.zs-progress-step svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 300ms var(--zs-ease);
+}
+
+.zs-progress-step:is(.is-first, .is-previous):hover svg {
+  transform: translateY(-2px);
+}
+
+.zs-progress-step:is(.is-next, .is-last):hover svg {
+  transform: translateY(2px);
+}
+
+.zs-progress-step:focus-visible {
+  outline: 1px solid var(--zs-accent);
+  outline-offset: 2px;
+}
+
+.zs-progress-step[aria-disabled="true"] {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.zs-progress-step[aria-disabled="true"] svg {
+  transform: none;
+}
+
+/* The steps nearest the line sit closer to it than the ends. */
+.zs-progress-step.is-previous,
+.zs-progress-step.is-last {
+  margin-top: -6px;
+}
+
+/* On the opening step the number gives way to the invitation. */
+.zs-progress.is-first .zs-progress-now {
+  visibility: hidden;
+}
+
+.zs-progress-list {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  list-style: none;
+}
+
+.zs-progress-list button {
+  border: 0;
+  background: none;
+}
+
+/* Focus brings the visually hidden chapter list into view. */
+.zs-progress-list:focus-within {
+  top: calc(100% + 12px);
+  right: 0;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip-path: none;
+  font-size: 12px;
+}
+
+.zs-progress-list:focus-within button:focus-visible {
+  outline: 1px solid var(--zs-accent);
+  outline-offset: 2px;
+}
+
+@keyframes zs-run {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(720%);
+  }
+}
+
+/* Steps scroll over the sticky stage; only their text takes pointer events. */
+.zs-steps {
+  position: relative;
+  margin-top: -100vh;
+  margin-top: -100svh;
+  pointer-events: none;
+  /* The text shades spill past the edges: clip them, without a scroll
+     container, so the stage stays sticky. */
+  overflow-x: clip;
+}
+
+.zs-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 115vh;
+  min-height: 115svh;
+  padding: 18vh var(--zs-gutter);
+}
+
+.zs-step[data-layout="left"] {
+  padding-right: 50%;
+}
+
+.zs-step[data-layout="right"] {
+  justify-content: flex-end;
+  padding-left: 50%;
+  padding-right: calc(var(--zs-gutter) * 0.6 + 28px + 24px);
+}
+
+.zs-step[data-layout="intro"] {
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 14vh;
+  text-align: center;
+}
+
+.zs-text {
+  position: relative;
+  isolation: isolate;
+  pointer-events: auto;
+  max-width: 34rem;
+  opacity: 0.18;
+  transition: opacity 700ms var(--zs-ease);
+}
+
+/* A soft shade behind the text: it reads where the sphere runs under it. */
+.zs-text::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -12% -18%;
+  pointer-events: none;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--zs-bg) 72%, transparent) 55%,
+    color-mix(in srgb, var(--zs-bg) 35%, transparent) 80%,
+    transparent 100%
+  );
+}
+
+.zs-step.is-active .zs-text {
+  opacity: 1;
+}
+
+.zs-step[data-layout="intro"] .zs-text {
+  max-width: 56rem;
+}
+
+/* Centered text can meet the sphere: a halo of the background keeps it read. */
+.zs-step[data-layout="intro"] :is(.zs-lede, .zs-source) {
+  text-shadow:
+    0 0 2px var(--zs-bg),
+    0 0 10px var(--zs-bg),
+    0 0 22px var(--zs-bg);
+}
+
+.zs-kicker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 1.2em;
+  color: var(--zs-accent);
+}
+
+.zs-step[data-layout="intro"] .zs-kicker {
+  justify-content: center;
+}
+
+.zs-index {
+  font-variant-numeric: tabular-nums;
+  color: var(--zs-ink);
+}
+
+.zs-rule {
+  flex: none;
+  width: 40px;
+  height: 1px;
+  background: currentColor;
+  transform-origin: left;
+}
+
+.zs-headline {
+  margin: 0 0 0.32em;
+  font-size: clamp(2.4rem, 5.4vw, 5.6rem);
+  font-weight: 800;
+  line-height: 0.92;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+}
+
+h1.zs-headline {
+  font-size: clamp(2.8rem, 6vw, 6.4rem);
+}
+
+/* A scene that continues the chapter above: its heading, already read,
+   steps back to a quiet line under the kicker, which reads as the
+   subtitle. */
+.zs-step.is-continued .zs-headline {
+  font-size: clamp(1.1rem, 1.6vw, 1.5rem);
+  letter-spacing: -0.01em;
+  color: var(--zs-muted);
+}
+
+/* Words rise through a mask; the clip keeps descenders. */
+.zs-w {
+  display: inline-block;
+  overflow: clip;
+  overflow-clip-margin: 0.12em;
+  padding-bottom: 0.06em;
+  margin-bottom: -0.06em;
+  vertical-align: top;
+}
+
+.zs-w > span {
+  display: inline-block;
+}
+
+.zs-lede {
+  max-width: 36ch;
+  margin: 0 0 1.4em;
+  font-size: clamp(15px, 1.1vw + 9px, 19px);
+  line-height: 1.5;
+  text-wrap: pretty;
+  color: color-mix(in srgb, var(--zs-ink) 84%, transparent);
+}
+
+.zs-lede:has(+ .zs-lede) {
+  margin-bottom: 0.8em;
+}
+
+.zs-step[data-layout="intro"] .zs-lede {
+  margin-inline: auto;
+}
+
+.zs-source {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--zs-muted);
+}
+
+.zs-source a {
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--zs-accent) 60%, transparent);
+  transition: color 200ms;
+}
+
+.zs-source a:hover {
+  color: var(--zs-ink);
+}
+
+@keyframes zs-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@media (max-width: 899px) {
+  .zs-story[data-layout] {
+    --zs-veil-angle: 0deg;
+    --zs-veil-solid: 18%;
+    --zs-veil-clear: 52%;
+  }
+  .zs-step,
+  .zs-step[data-layout] {
+    justify-content: flex-start;
+    align-items: flex-end;
+    padding: 0 var(--zs-gutter) 10vh;
+    text-align: left;
+  }
+  .zs-step[data-layout="intro"] .zs-kicker {
+    justify-content: flex-start;
+  }
+  .zs-step[data-layout="intro"] .zs-lede {
+    margin-inline: 0;
+  }
+  .zs-progress {
+    --track: 60svh;
+    right: 4px;
+  }
+  .zs-progress-step,
+  .zs-progress-now,
+  .zs-progress-total,
+  .zs-progress-cue,
+  .zs-progress-tick {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zs-veil,
+  .zs-text,
+  .zs-progress * {
+    transition: none;
+  }
+  .zs-progress-nudge::after,
+  .zs-story.is-loading .zs-status {
+    animation: none;
+  }
+}
+
+/* ---- widgets: a band along the top of their step ----------------------- */
+
+.zs-band {
+  position: absolute;
+  top: 20px;
+  left: var(--zs-gutter);
+  right: var(--zs-gutter);
+  z-index: 1;
+  pointer-events: auto;
+}
+
+/* A shade from the top: the numbers read over the moving map. */
+.zs-band::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: -20px;
+  left: calc(-1 * var(--zs-gutter));
+  right: calc(-1 * var(--zs-gutter));
+  height: calc(100% + 180px);
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    var(--zs-bg) 0%,
+    color-mix(in srgb, var(--zs-bg) 88%, transparent) 38%,
+    color-mix(in srgb, var(--zs-bg) 45%, transparent) 70%,
+    transparent 100%
+  );
+}
+
+/* ---- stage widgets: the free side of the sphere ------------------------ */
+
+/* A stage widget takes the free side: the sphere steps back behind it. */
+.zs-stage > canvas {
+  transition: opacity 900ms var(--zs-ease);
+}
+
+.zs-story.has-stage-widget .zs-stage > canvas {
+  opacity: var(--zs-dim, 0.16);
+}
+
+.zs-stage-widgets {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.zs-stage-widget {
+  position: absolute;
+  top: calc(50% + var(--zs-header-h, 0px) / 2);
+  left: 47%;
+  right: calc(var(--zs-gutter) * 2);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(calc(-50% + 18px));
+  transition:
+    opacity 700ms var(--zs-ease),
+    transform 900ms var(--zs-ease),
+    visibility 0s 700ms;
+}
+
+/* The side of its own scene: a widget fading out keeps it while the story
+   already shows the next scene's layout. */
+.zs-stage-widget[data-layout="right"] {
+  left: calc(var(--zs-gutter) * 2);
+  right: 47%;
+}
+
+.zs-stage-widget.is-active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(-50%);
+  transition:
+    opacity 900ms 250ms var(--zs-ease),
+    transform 1100ms 250ms var(--zs-ease),
+    visibility 0s;
+}
+
+/* ---- legend: a quiet key along the bottom, like the progress line ------ */
+
+.zs-legend {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  right: calc(var(--zs-gutter) * 2);
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px 28px;
+  pointer-events: auto;
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--zs-muted);
+  font-variant-numeric: tabular-nums;
+  animation: zs-legend-in 700ms var(--zs-ease) both;
+}
+
+/* A soft shade across the stage, so the key reads over light fields. */
+.zs-legend::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: -100vw;
+  right: -100vw;
+  bottom: -22px;
+  height: calc(100% + 110px);
+  pointer-events: none;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--zs-bg) 78%, transparent) 0%,
+    color-mix(in srgb, var(--zs-bg) 55%, transparent) 40%,
+    color-mix(in srgb, var(--zs-bg) 20%, transparent) 75%,
+    transparent 100%
+  );
+}
+
+.zs-story[data-layout="right"] .zs-legend {
+  left: calc(var(--zs-gutter) * 2);
+  right: 50%;
+}
+
+.zs-story[data-layout="intro"] .zs-legend {
+  left: calc(var(--zs-gutter) * 2);
+}
+
+@keyframes zs-legend-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.zs-legend[hidden] {
+  display: none;
+}
+
+.zs-legend-time {
+  flex: 1 1 100%;
+  display: grid;
+  gap: 6px;
+}
+
+.zs-legend-date {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--zs-ink);
+}
+
+.zs-legend-date:empty::before {
+  content: "\00a0";
+}
+
+/* One ramp spans the timeline; several share its width. */
+.zs-legend-ramp {
+  flex: 1 1 0;
+  min-width: 140px;
+  display: grid;
+  gap: 4px;
+}
+
+.zs-legend-label {
+  margin: 0;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.zs-legend-unit {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.zs-legend-bar {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--zs-line);
+}
+
+.zs-legend-ticks {
+  position: relative;
+  height: 1.3em;
+}
+
+.zs-legend-ticks span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.zs-legend-ticks span:first-child {
+  transform: none;
+}
+
+.zs-legend-ticks span:last-child {
+  transform: translateX(-100%);
+}
+
+.zs-legend-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+}
+
+.zs-legend-swatches li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.zs-legend-chip {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.zs-legend-chip.is-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.zs-legend-chip.is-line {
+  width: 16px;
+  height: 2px;
+}
+
+/* The timeline: a hairline over the window, month ticks, a small thumb. */
+.zs-timeline {
+  position: relative;
+  height: 14px;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+
+.zs-timeline.is-empty {
+  visibility: hidden;
+}
+
+.zs-timeline::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--zs-line);
+}
+
+.zs-timeline-ticks span {
+  position: absolute;
+  top: calc(50% - 3px);
+  width: 1px;
+  height: 6px;
+  background: var(--zs-line);
+}
+
+.zs-timeline-thumb {
+  position: absolute;
+  top: calc(50% - 5px);
+  left: -1px;
+  width: 2px;
+  height: 10px;
+  border-radius: 1px;
+  background: var(--zs-accent);
+  transition: height 200ms var(--zs-ease);
+}
+
+.zs-timeline:hover .zs-timeline-thumb,
+.zs-timeline.is-dragging .zs-timeline-thumb {
+  top: calc(50% - 7px);
+  height: 14px;
+}
+
+/* A series on the timeline: a thin line over the window, on the hairline,
+   with a dot riding it at the thumb. Its box is --zs-series-top tall
+   margin, then --zs-series-h: the dot's top uses the same two. */
+.zs-timeline.has-series {
+  --zs-series-top: 3px;
+  --zs-series-h: 26px;
+  height: calc(var(--zs-series-top) + var(--zs-series-h) + 4px);
+}
+
+.zs-timeline.has-series::before {
+  top: auto;
+  bottom: 0;
+}
+
+.zs-timeline.has-series .zs-timeline-ticks span {
+  top: auto;
+  bottom: 0;
+  height: 4px;
+}
+
+.zs-timeline-series {
+  position: absolute;
+  top: var(--zs-series-top);
+  left: 0;
+  width: 100%;
+  height: var(--zs-series-h);
+  overflow: visible;
+  pointer-events: none;
+}
+
+.zs-timeline-line {
+  fill: none;
+  stroke: var(--zs-accent);
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.9;
+}
+
+.zs-timeline-area {
+  fill: color-mix(in srgb, var(--zs-accent) 14%, transparent);
+  stroke: none;
+}
+
+.zs-timeline.has-series .zs-timeline-thumb,
+.zs-timeline.has-series:hover .zs-timeline-thumb,
+.zs-timeline.has-series.is-dragging .zs-timeline-thumb {
+  top: 0;
+  left: -0.5px;
+  width: 1px;
+  height: 100%;
+  opacity: 0.7;
+}
+
+.zs-timeline-dot {
+  position: absolute;
+  left: -3.5px;
+  width: 7px;
+  height: 7px;
+  margin-top: -3.5px;
+  border-radius: 50%;
+  background: var(--zs-accent);
+  box-shadow: 0 0 0 2px var(--zs-bg);
+  pointer-events: none;
+}
+
+.zs-legend-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+}
+
+.zs-legend-reading {
+  margin: 0;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* Units keep their case: m, not M. */
+.zs-legend-reading strong {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--zs-accent);
+}
+
+.zs-timeline:focus-visible {
+  box-shadow: 0 0 0 1px var(--zs-accent);
+  border-radius: 2px;
+}
+
+/* How a map's data was made, under the scene's text. */
+.zs-basis {
+  margin: 14px 0 0;
+  max-width: 34rem;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--zs-muted);
+}
+
+/* Its methodology page, from the catalog. */
+.zs-method {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--zs-muted);
+}
+
+.zs-method a {
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--zs-accent) 60%, transparent);
+}
+
+@media (max-width: 899px) {
+  .zs-stage-widget,
+  .zs-story[data-layout] .zs-stage-widget {
+    top: calc(var(--zs-header-h, 0px) + 12px);
+    left: var(--zs-gutter);
+    right: calc(var(--zs-gutter) + 20px);
+    transform: translateY(18px);
+  }
+  .zs-stage-widget.is-active {
+    transform: none;
+  }
+  .zs-legend,
+  .zs-story[data-layout] .zs-legend {
+    left: var(--zs-gutter);
+    right: calc(var(--zs-gutter) + 20px);
+    bottom: auto;
+    top: calc(var(--zs-header-h, 0px) + 8px);
+  }
+  .zs-story.has-stage-widget:not([data-layout="stage"]) .zs-legend {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zs-stage > canvas,
+  .zs-stage-widget,
+  .zs-legend {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* ---- stage scenes: no text, the view takes the screen ------------------ */
+
+.zs-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Scroll room for the view to unfold. */
+.zs-step[data-layout="stage"] {
+  min-height: 190vh;
+  min-height: 190svh;
+  padding: 0;
+}
+
+.zs-step[data-layout="stage"] .zs-text::before {
+  content: none;
+}
+
+/* The key along the bottom, under the view. */
+.zs-story[data-layout="stage"] .zs-legend {
+  left: calc(var(--zs-gutter) * 2);
+  right: 62%;
+}

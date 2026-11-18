@@ -40,14 +40,23 @@ test("story opens its first scene", async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test("site mounts its story slot", async ({ page }) => {
+test("story adapter mounts a scroll story", async ({ page }) => {
   const errors = collectErrors(page);
-  await page.goto(demoUrl("site"));
+  await page.goto(demoUrl("scroll"));
   const story = page.locator(".zs-story");
   await expect(story.locator('[data-projversor="gl"]')).toHaveCount(1, LOAD);
-  // Set once the first scene's layer shows.
-  await expect(story).toHaveAttribute("data-shown", /.+/, LOAD);
+  // `ready` settled: the first view shows.
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-ready",
+    "true",
+    LOAD,
+  );
   await expect(story.locator(".zs-status")).toHaveText("");
+  // The prelude has no number; the next scene is 01.
+  await expect(story.locator('[data-scene="intro"] .zs-index')).toHaveCount(0);
+  await expect(story.locator('[data-scene="pacific"] .zs-index')).toHaveText(
+    "01",
+  );
   expect(errors).toEqual([]);
 });
 

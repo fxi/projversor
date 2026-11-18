@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseProjversorView } from "../../src";
-import { parseStoryDocuments, sceneViewId } from "@fxi/zartigl/story";
+import { parseStoryDocuments, sceneViewId } from "@fxi/story/browser";
 import { LAYOUT_IDS, isLayoutId } from "./layout";
 import storyJson from "./story.json";
 import viewsJson from "./views.json";

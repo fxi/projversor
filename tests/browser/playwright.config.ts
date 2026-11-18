@@ -6,8 +6,8 @@ export const HARNESS_PORT = 5180;
 export const DEMOS = {
   explorer: { port: 5181, path: "/projversor/" },
   story: { port: 5182, path: "/projversor/story/" },
-  site: { port: 5183, path: "/" },
   minimal: { port: 5184, path: "/projversor/minimal/" },
+  scroll: { port: 5183, path: "/projversor/scroll/" },
   compare: { port: 5185, path: "/projversor/compare/" },
 } as const;
 

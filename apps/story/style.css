@@ -595,11 +595,10 @@ story-pager button:disabled {
 .story-pager__step[aria-current="step"] {
   color: var(--story-bg);
   font-weight: 700;
-  background:
-    conic-gradient(
-      var(--accent) calc(var(--progress, 0) * 360deg),
-      color-mix(in srgb, var(--accent) 45%, transparent) 0
-    );
+  background: conic-gradient(
+    var(--accent) calc(var(--progress, 0) * 360deg),
+    color-mix(in srgb, var(--accent) 45%, transparent) 0
+  );
 }
 
 .story-pager__gap {

@@ -10,7 +10,7 @@ import type { FieldLayerHandle, Projversor } from "./Projversor";
 import type { ShareState } from "./share";
 
 /**
- * A story view, as `@fxi/zartigl/story` defines it. Declared here so this
+ * A story view, as `@fxi/story` defines it. Declared here so this
  * entry stays independent: the adapter fits the story registry structurally.
  */
 export interface ProjversorViewDefinition {

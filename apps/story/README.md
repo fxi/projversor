@@ -11,21 +11,21 @@ npm run build:apps    # dist-apps/story/, served under /projversor/story/
 ```
 
 The app uses the `Projversor` API (`../../src`) for the renderer and
-`@fxi/zartigl/story` for the story runtime, the `<story-pager>` element and
+`@fxi/story` for the story runtime, the `<story-pager>` element and
 the scene timer.
 
 ## Layout system
 
 A scene's `layout` is an intent, resolved per viewport by `layout.ts`:
 
-| Layout | Text | Map |
-|---|---|---|
-| `n-s`, `s-n` | top, bottom | below, above |
-| `w-e`, `e-w` | left, right column | beside |
-| `nw-se`, `ne-sw`, `sw-ne`, `se-nw` | a corner | the larger free side |
-| `title`, `end` | centered top, bottom | below, above |
-| `minimal` | small, top left | the larger free side |
-| `none` | none | the whole screen |
+| Layout                             | Text                 | Map                  |
+| ---------------------------------- | -------------------- | -------------------- |
+| `n-s`, `s-n`                       | top, bottom          | below, above         |
+| `w-e`, `e-w`                       | left, right column   | beside               |
+| `nw-se`, `ne-sw`, `sw-ne`, `se-nw` | a corner             | the larger free side |
+| `title`, `end`                     | centered top, bottom | below, above         |
+| `minimal`                          | small, top left      | the larger free side |
+| `none`                             | none                 | the whole screen     |
 
 - **Veil, not panels.** One full-screen gradient runs from the solid text
   side to the clear map side. Its angle and stops are css custom properties

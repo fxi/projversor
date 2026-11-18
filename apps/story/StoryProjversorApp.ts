@@ -29,7 +29,7 @@ import {
   type StoryPagerNavigateDetail,
   type StoryScene,
   type StoryViewDefinition,
-} from "@fxi/zartigl/story";
+} from "@fxi/story/browser";
 import { drawLayoutDebug, type LayoutSnapshot } from "./debug";
 import { storyUiLabels, type StoryUiLabels } from "./labels";
 import {

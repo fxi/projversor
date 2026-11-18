@@ -32,7 +32,7 @@ jobs:
       - run: |
           mkdir -p dist-pages
           cp -R dist-apps/explorer/. dist-pages/
-          for app in story site minimal compare; do
+          for app in story minimal scroll compare; do
             mkdir -p "dist-pages/$app"
             cp -R "dist-apps/$app/." "dist-pages/$app/"
           done

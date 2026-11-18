@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "defaultLocale": "en",
+  "fallbackLocales": ["fr"],
+  "title": { "en": "A scroll story", "fr": "Une story à défiler" },
+  "themes": {
+    "ocean": {
+      "background": "#030409",
+      "foreground": "#eef2ea",
+      "muted": "#93a39a",
+      "accent": "#fde725",
+      "accentSoft": "rgba(253, 231, 37, 0.18)",
+      "surface": "rgba(3, 6, 8, 0.72)"
+    }
+  },
+  "scenes": [
+    {
+      "id": "intro",
+      "role": "prelude",
+      "name": { "en": "Intro", "fr": "Intro" },
+      "theme": "ocean",
+      "layout": "left",
+      "blocks": [
+        {
+          "id": "intro-view",
+          "type": "view",
+          "slot": "stage",
+          "view": "currents",
+          "presentation": "background"
+        },
+        {
+          "id": "intro-copy",
+          "type": "copy",
+          "slot": "copy",
+          "heading": { "en": "Ocean currents", "fr": "Courants océaniques" },
+          "text": {
+            "en": "A prelude scene: no number. Scroll on.",
+            "fr": "Une scène de prélude : sans numéro. Défilez."
+          }
+        }
+      ]
+    },
+    {
+      "id": "pacific",
+      "name": { "en": "Pacific", "fr": "Pacifique" },
+      "theme": "ocean",
+      "layout": "right",
+      "blocks": [
+        {
+          "id": "pacific-view",
+          "type": "view",
+          "slot": "stage",
+          "view": "sst",
+          "presentation": "background"
+        },
+        {
+          "id": "pacific-copy",
+          "type": "copy",
+          "slot": "copy",
+          "label": {
+            "en": "Sea surface temperature anomaly",
+            "fr": "Anomalie de température de surface"
+          },
+          "heading": { "en": "A warm Pacific", "fr": "Un Pacifique chaud" },
+          "text": {
+            "en": "The first numbered scene.",
+            "fr": "La première scène numérotée."
+          }
+        }
+      ]
+    }
+  ]
+}

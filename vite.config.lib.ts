@@ -1,4 +1,5 @@
-import { defineConfig } from "vite";
+import { readFileSync } from "node:fs";
+import { defineConfig, type Plugin } from "vite";
 import glsl from "vite-plugin-glsl";
 import dts from "vite-plugin-dts";
 import pkg from "./package.json" with { type: "json" };
@@ -13,6 +14,18 @@ const dependencies = Object.keys({
 const external = (id: string) =>
   dependencies.some((name) => id === name || id.startsWith(`${name}/`));
 
+/** The story styles ship as a plain file: `@fxi/projversor/story.css`. */
+const storyCss = (): Plugin => ({
+  name: "projversor-story-css",
+  generateBundle() {
+    this.emitFile({
+      type: "asset",
+      fileName: "story.css",
+      source: readFileSync("src/story/story.css", "utf8"),
+    });
+  },
+});
+
 export default defineConfig({
   plugins: [
     glsl(),
@@ -22,12 +35,13 @@ export default defineConfig({
       entryRoot: "src",
       rollupTypes: true,
     }),
+    storyCss(),
   ],
   publicDir: false,
   build: {
     lib: {
       // "index", not "projversor": Projversor.d.ts would clash on macOS.
-      entry: { index: "src/index.ts" },
+      entry: { index: "src/index.ts", story: "src/story/index.ts" },
       formats: ["es"],
       fileName: (_format, entryName) => `${entryName}.js`,
     },

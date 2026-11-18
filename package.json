@@ -14,7 +14,12 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
-    }
+    },
+    "./story": {
+      "types": "./dist/story.d.ts",
+      "import": "./dist/story.js"
+    },
+    "./story.css": "./dist/story.css"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -34,8 +39,7 @@
     "dev:compare": "vite --config apps/compare/vite.config.ts",
     "dev:explorer": "vite --config apps/explorer/vite.config.ts",
     "dev:story": "vite --config apps/story/vite.config.ts",
-    "dev:site": "vite --config apps/site/vite.config.ts",
-    "build:apps": "vite build --config apps/explorer/vite.config.ts && vite build --config apps/story/vite.config.ts && vite build --config apps/site/vite.config.ts && vite build --config apps/minimal/vite.config.ts && vite build --config apps/compare/vite.config.ts",
+    "build:apps": "vite build --config apps/explorer/vite.config.ts && vite build --config apps/story/vite.config.ts && vite build --config apps/minimal/vite.config.ts && vite build --config apps/scroll/vite.config.ts && vite build --config apps/compare/vite.config.ts",
     "format": "prettier --write \"**/*.{js,mjs,ts}\"",
     "format:check": "prettier --check \"**/*.{js,mjs,ts}\"",
     "lint": "eslint . --max-warnings 0",
@@ -47,12 +51,14 @@
     "release:patch": "npm version patch && git push origin main --follow-tags",
     "release:minor": "npm version minor && git push origin main --follow-tags",
     "release:major": "npm version major && git push origin main --follow-tags",
-    "prepublishOnly": "npm run build:lib"
+    "prepublishOnly": "npm run build:lib",
+    "dev:scroll": "vite --config apps/scroll/vite.config.ts"
   },
   "dependencies": {
     "@types/d3": "^7.4.3",
     "d3": "^7.9.0",
-    "topojson-client": "^3.1.0"
+    "topojson-client": "^3.1.0",
+    "@fxi/story": "file:../story"
   },
   "peerDependencies": {
     "@fxi/zartigl": "^0.16.2"

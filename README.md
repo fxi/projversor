@@ -78,9 +78,27 @@ pv.destroy();
   properties `--ocean`, `--land`, `--coast`, `--graticule`, `--equator` and
   `--outline`, read at `init()`; `colors` (option or `update`) overrides
   them at any time.
-- **Stories.** `ProjversorStoryView` adapts a projversor to the
-  `@fxi/zartigl/story` registry; a view config may carry a `geojson`
-  and a `timeRange`.
+- **Stories.** `@fxi/projversor/story` is the globe adapter of
+  [`@fxi/story`](https://www.npmjs.com/package/@fxi/story): `mountStory`
+  renders a scroll story with one sticky sphere behind the text. Scenes with
+  `role: "prelude"` are unnumbered, and content widgets come in through
+  `widgets`. Add `@fxi/projversor/story.css`. `ready` settles with the first
+  view, so a host can keep its static fallback until then.
+  `ProjversorStoryView` adapts a projversor to a story registry; a view
+  config may carry a `geojson` and a `timeRange`.
+
+  ```ts
+  import { mountStory } from "@fxi/projversor/story";
+  import "@fxi/projversor/story.css";
+
+  const story = await mountStory(host, {
+    source: new URL("/stories/el-nino/", location.href),
+    t: { locale: "en", text: (value) => value.en ?? "" },
+    labels, // loading, scroll, steps, key, timeline, method
+    widgets: { "nino-chart": ninoChart },
+  });
+  await story.ready; // the first view is on screen
+  ```
 
 ## Development
 
@@ -97,20 +115,21 @@ npm test                # unit tests
 npm run quality         # prettier, eslint, tsc
 npm run build:lib       # dist/: the published package
 npm run test:browser    # reference renders and app smoke tests
-npm run dev:explorer    # also dev:story, dev:site, dev:minimal
+npm run dev:explorer    # also dev:story, dev:minimal, dev:scroll
 ```
 
 Apps: `apps/explorer` (every catalog layer on the sphere), `apps/story` (a
-story), `apps/site` (home page with a scroll story) and `apps/minimal` (sea
-surface temperature anomaly and the Niño regions, the smallest page).
+story), `apps/minimal` (sea surface temperature anomaly and the Niño
+regions, the smallest page) and `apps/scroll` (the `@fxi/projversor/story`
+adapter on a two-scene story).
 `npm run dev:explorer` and the like serve each one; `npm run build:apps`
 builds them all into `dist-apps/<name>/`.
 
 ## Docker
 
 The image serves the apps with nginx on port 8080: the explorer at `/`,
-the story at `/story/`, the site at `/site/` and the minimal page at
-`/minimal/` (`/healthz` for health checks).
+the story at `/story/` and the minimal page at `/minimal/` (`/healthz` for
+health checks).
 
 ```bash
 docker compose up -d --build   # from this folder; open http://localhost:8080
@@ -121,7 +140,8 @@ CI publishes `ghcr.io/fxi/projversor` from `main` (`latest`) and from `v*`
 tags.
 
 The same apps are published to GitHub Pages from `main`
-(`https://fxi.github.io/projversor/`, `story/`, `site/`, `minimal/`).
+(`https://fxi.github.io/projversor/`, `story/`, `minimal/`, `scroll/`,
+`compare/`).
 
 ## Releases
 

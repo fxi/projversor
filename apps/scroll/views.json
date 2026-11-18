@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "views": [
+    {
+      "id": "currents",
+      "type": "projversor",
+      "config": {
+        "layer": "ocean-current-velocity",
+        "preset": "south",
+        "rotate": [-120, 62, 0],
+        "zoom": 2.2,
+        "style": { "palette": "plasma" },
+        "transitionMs": 2400
+      }
+    },
+    {
+      "id": "sst",
+      "type": "projversor",
+      "config": {
+        "layer": "sea-surface-temperature-anomaly",
+        "preset": "globe",
+        "rotate": [105, 5, 0],
+        "zoom": 1.2,
+        "style": { "palette": "viridis" },
+        "transitionMs": 3000
+      }
+    }
+  ]
+}
