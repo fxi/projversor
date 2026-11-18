@@ -24,7 +24,12 @@ export {
   type StoryWidgetContext,
   type StoryWidgetInstance,
 } from "./widgets";
-export type { LegendSwatch } from "./legend";
+export {
+  parseLegendConfig,
+  parseSeriesData,
+  type LegendConfig,
+  type LegendSwatch,
+} from "./legend";
 export type { StepLabels } from "./progress";
 export { isContentPath } from "./contentPath";
 export { paragraphs } from "./paragraphs";
