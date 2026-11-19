@@ -593,6 +593,19 @@ h1.zs-headline {
   color: var(--zs-ink);
 }
 
+/* A link the sentence asks for: the text's colour, an accent rule under it. */
+.zs-lede a {
+  color: var(--zs-ink);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--zs-accent) 70%, transparent);
+  transition: border-color 200ms;
+}
+
+.zs-lede a:hover,
+.zs-lede a:focus-visible {
+  border-bottom-color: var(--zs-accent);
+}
+
 @keyframes zs-pulse {
   50% {
     opacity: 0.4;

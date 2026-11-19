@@ -5,6 +5,7 @@ import {
   sceneNumbers,
   sceneViewId,
   storyExternalLinkAttributes,
+  textRuns,
   type StoryCopyBlock,
   type StoryDocument,
   type StoryScene,
@@ -363,7 +364,22 @@ function renderStep(
     for (const paragraph of paragraphs(t.text(copy.text))) {
       const lede = doc.createElement("p");
       lede.className = "zs-lede";
-      lede.textContent = paragraph;
+      // Text runs and `[label](https://…)` links: elements, never HTML.
+      for (const run of textRuns(paragraph)) {
+        if (run.href === undefined) {
+          lede.append(run.text);
+          continue;
+        }
+        const a = doc.createElement("a");
+        Object.assign(
+          a,
+          storyExternalLinkAttributes(
+            { label: { en: run.text }, url: run.href },
+            run.text,
+          ),
+        );
+        lede.append(a);
+      }
       text.append(lede);
     }
   }
