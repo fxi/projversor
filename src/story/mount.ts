@@ -161,6 +161,17 @@ function stageDim(scene: StoryScene): number | null {
   return typeof dim === "number" && dim >= 0 && dim <= 1 ? dim : 0.16;
 }
 
+/**
+ * Whether a stage scene's view leaves a column beside it: for a stage
+ * widget, or for its copy (heading and copy widgets).
+ */
+export function sceneAside(scene: StoryScene): boolean {
+  return (
+    Boolean(sceneCopy(scene)) ||
+    sceneWidgets(scene).some((block) => block.slot === "stage")
+  );
+}
+
 function sceneCopy(scene: StoryScene): StoryCopyBlock | undefined {
   return scene.blocks.find(
     (block): block is StoryCopyBlock => block.type === "copy",
@@ -290,30 +301,51 @@ function renderStep(
   const text = doc.createElement("div");
   text.className = "zs-text";
   const copy = sceneCopy(scene);
+  // A prelude scene (`role: "prelude"`) has no kicker and no number.
+  const kicker = (number: number) => {
+    const el = doc.createElement("p");
+    el.className = "zs-kicker";
+    const index = doc.createElement("span");
+    index.className = "zs-index";
+    index.textContent = pad(number);
+    const rule = doc.createElement("span");
+    rule.className = "zs-rule";
+    el.append(index, rule);
+    if (copy?.label) {
+      el.append(t.text(copy.label));
+    }
+    return el;
+  };
   if (scene.layout === "stage") {
-    // No text on screen: the view is the scene. Its name, for screen readers.
-    const name = doc.createElement("h2");
-    name.className = "zs-sr";
-    name.textContent = copy ? t.text(copy.heading) : t.text(scene.name);
-    text.append(name);
+    if (copy) {
+      // The view is the scene: its heading, short, and its copy widgets
+      // beside it, in the column the view leaves.
+      if (displayNumber !== null) {
+        text.append(kicker(displayNumber));
+      }
+      text.append(headline(doc, "h2", t.text(copy.heading)));
+      for (const block of sceneWidgets(scene)) {
+        if (block.slot === "copy") {
+          text.append(widgetHost(doc, block, hosts));
+        }
+      }
+    } else {
+      // No text on screen: its name, for screen readers.
+      const name = doc.createElement("h2");
+      name.className = "zs-sr";
+      name.textContent = t.text(scene.name);
+      text.append(name);
+    }
+    const theme = story.themes[scene.theme];
+    if (theme) {
+      step.style.setProperty("--zs-accent", theme.accent);
+    }
     step.append(text);
     return step;
   }
 
-  // A prelude scene (`role: "prelude"`) has no kicker and no number.
   if (displayNumber !== null) {
-    const kicker = doc.createElement("p");
-    kicker.className = "zs-kicker";
-    const number = doc.createElement("span");
-    number.className = "zs-index";
-    number.textContent = pad(displayNumber);
-    const rule = doc.createElement("span");
-    rule.className = "zs-rule";
-    kicker.append(number, rule);
-    if (copy?.label) {
-      kicker.append(t.text(copy.label));
-    }
-    text.append(kicker);
+    text.append(kicker(displayNumber));
   }
   // A scene under the previous one's heading continues its chapter: the
   // heading steps back and the kicker reads as the subtitle.
@@ -884,13 +916,7 @@ export async function mountStory<T extends StoryText>(
         win?.getComputedStyle(root).getPropertyValue("--zs-header-h") ?? "",
       ) || 0;
     projversor.view.setInset(
-      sceneInset(
-        scene.layout,
-        width,
-        height,
-        header,
-        sceneWidgets(scene).some((block) => block.slot === "stage"),
-      ),
+      sceneInset(scene.layout, width, height, header, sceneAside(scene)),
       durationMs,
     );
   };

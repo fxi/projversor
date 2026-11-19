@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { parseLegendConfig, rampTicks } from "./legend";
 import { authoringGuide } from "./guide";
-import { parseStory, sceneCatalogId, sceneInset } from "./mount";
+import type { StoryScene } from "@fxi/story";
+import { parseStory, sceneAside, sceneCatalogId, sceneInset } from "./mount";
 import {
   fractionAt,
   monthTicks,
@@ -103,6 +104,45 @@ describe("sceneInset", () => {
       bottom: 240,
       left: 0,
     });
+  });
+});
+
+describe("sceneAside", () => {
+  const scene = (blocks: unknown[]) =>
+    ({
+      id: "s",
+      name: { en: "S" },
+      theme: "t",
+      layout: "stage",
+      blocks: [
+        {
+          id: "v",
+          type: "view",
+          slot: "stage",
+          view: "globe",
+          presentation: "background",
+        },
+        ...blocks,
+      ],
+    }) as StoryScene;
+  const chart = (slot: string) => ({
+    id: "c",
+    type: "widget",
+    slot,
+    widget: "chart",
+  });
+
+  it("leaves a column for a stage widget or for the scene's copy", () => {
+    expect(sceneAside(scene([]))).toBe(false);
+    expect(sceneAside(scene([chart("stage")]))).toBe(true);
+    expect(
+      sceneAside(
+        scene([
+          { id: "h", type: "copy", slot: "copy", heading: { en: "H" } },
+          chart("copy"),
+        ]),
+      ),
+    ).toBe(true);
   });
 });
 

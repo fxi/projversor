@@ -7,6 +7,7 @@ export {
   methodLink,
   mountStory,
   parseStory,
+  sceneAside,
   sceneCatalogId,
   sceneContinues,
   sceneInset,

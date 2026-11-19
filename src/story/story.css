@@ -1098,6 +1098,45 @@ h1.zs-headline {
   content: none;
 }
 
+/* A stage scene's copy holds over the stage, in the column the view leaves. */
+.zs-step[data-layout="stage"] .zs-text {
+  position: sticky;
+  top: calc(var(--zs-header-h, 0px) + 6vh);
+  align-self: flex-start;
+  max-width: none;
+  margin-left: max(61%, calc(100% - 620px));
+  margin-right: calc(var(--zs-gutter) * 0.6 + 28px + 24px);
+}
+
+.zs-step[data-layout="stage"] .zs-headline {
+  font-size: clamp(1.3rem, 1.9vw, 2rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.zs-step[data-layout="stage"] .zs-text > .zs-widget {
+  margin-top: 18px;
+}
+
+/* Phones: under the view, held at the bottom of the screen. */
+@media (max-width: 899px) {
+  .zs-step[data-layout="stage"] .zs-text {
+    top: auto;
+    bottom: 10px;
+    align-self: flex-end;
+    margin: 0 calc(var(--zs-gutter) + 20px) 0 var(--zs-gutter);
+  }
+  .zs-step[data-layout="stage"] .zs-text > .zs-widget {
+    margin-top: 10px;
+  }
+  .zs-step[data-layout="stage"] .zs-kicker {
+    margin-bottom: 0.5em;
+  }
+  .zs-step[data-layout="stage"] .zs-headline {
+    font-size: 1.05rem;
+  }
+}
+
 /* The key along the bottom, under the view. */
 .zs-story[data-layout="stage"] .zs-legend {
   left: calc(var(--zs-gutter) * 2);
