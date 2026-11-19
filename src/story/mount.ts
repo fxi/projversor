@@ -106,9 +106,19 @@ export interface StoryDocuments {
   views: StoryViewsDocument;
 }
 
-/** Validate story documents against the layouts this mount renders. */
+/**
+ * Validate story documents against the layouts this mount renders, and
+ * each view's config against the projversor layers and presets: a view
+ * this mount would refuse fails here, not once its scene shows.
+ */
 export function parseStory(story: unknown, views: unknown): StoryDocuments {
-  return parseStoryDocuments(story, views, { layouts: STORY_LAYOUTS });
+  const documents = parseStoryDocuments(story, views, {
+    layouts: STORY_LAYOUTS,
+  });
+  for (const view of documents.views.views) {
+    parseProjversorView(view);
+  }
+  return documents;
 }
 
 /** Load and validate a story folder: `story.json` and `views.json`. */
@@ -230,7 +240,18 @@ export function sceneCatalogId(
   if (!id) {
     return null;
   }
-  const layer = viewById.get(id)?.config.layer;
+  const config = viewById.get(id)?.config;
+  const stack = config?.layers;
+  // A bare view (no layer) shows no dataset: no methodology to link.
+  if (
+    config &&
+    (Array.isArray(stack) ? stack.length === 0 : config.layer === undefined)
+  ) {
+    return null;
+  }
+  const layer = Array.isArray(stack)
+    ? (stack[0] as { layer?: unknown } | undefined)?.layer
+    : config?.layer;
   return typeof layer === "string" ? layer : id;
 }
 
@@ -444,9 +465,28 @@ export interface MountStoryOptions<T extends StoryText = StoryText> {
   deepLink?: boolean;
 }
 
+/** How long a snapshot waits for its scene's view to show. */
+const SNAPSHOT_SHOW_MS = 30_000;
+
+export interface StorySnapshotOptions {
+  /** Image type for `canvas.toBlob`, e.g. `image/webp`; PNG by default. */
+  type?: string;
+  quality?: number;
+  /** Scene to take: scrolled to, then taken once its view shows. */
+  scene?: string;
+}
+
 export interface MountedStory {
   /** Settles once the first view shows; rejects if it cannot. */
   ready: Promise<void>;
+  /**
+   * The sphere as an image (PNG by default), without the text: a scene's
+   * fallback image, taken from the live story. With `scene`, that scene is
+   * scrolled to and taken once its view shows (layers loaded, camera at
+   * rest); it rejects if the view fails or another scene takes over.
+   * Optional so stories mounted by other means still fit this type.
+   */
+  snapshot?(options?: StorySnapshotOptions): Promise<Blob>;
   destroy(): void;
 }
 
@@ -693,6 +733,58 @@ export async function mountStory<T extends StoryText>(
 
   let active = -1;
   let generation = 0;
+  // Each activation, and how it ended: a scene snapshot waits on the one
+  // showing its scene. A settled promise keeps its outcome, so a snapshot
+  // asked after the view showed (or failed) still gets it.
+  interface Activation {
+    index: number;
+    shown: Promise<void>;
+    settle: (error?: unknown) => void;
+  }
+  let activation: Activation | undefined;
+  const begun = new Set<(next: Activation) => void>();
+  const beginActivation = (index: number): Activation => {
+    // A view still loading is superseded: its waiters learn it.
+    activation?.settle(new Error("Another scene took over"));
+    let settled = false;
+    let settle: (error?: unknown) => void = () => {};
+    const shown = new Promise<void>((resolve, reject) => {
+      settle = (error) => {
+        if (!settled) {
+          settled = true;
+          if (error === undefined) {
+            resolve();
+          } else {
+            reject(error);
+          }
+        }
+      };
+    });
+    shown.catch(() => {});
+    const next = { index, shown, settle };
+    activation = next;
+    for (const listener of [...begun]) {
+      listener(next);
+    }
+    return next;
+  };
+  /** The activation showing `index`: the current one, or the next one. */
+  const activationOf = (index: number, signal: AbortSignal) =>
+    activation?.index === index
+      ? Promise.resolve(activation)
+      : new Promise<Activation>((resolve, reject) => {
+          const listener = (next: Activation) => {
+            if (next.index === index) {
+              begun.delete(listener);
+              resolve(next);
+            }
+          };
+          begun.add(listener);
+          signal.addEventListener("abort", () => {
+            begun.delete(listener);
+            reject(signal.reason);
+          });
+        });
   const inset = (durationMs: number) => {
     const scene = story.scenes[Math.max(0, active)];
     const { width, height } = stage.getBoundingClientRect();
@@ -769,6 +861,7 @@ export async function mountStory<T extends StoryText>(
     const current = ++generation;
     const previous = active;
     active = index;
+    const shown = beginActivation(index);
     root.dataset.layout = scene.layout;
     const accent = story.themes[scene.theme]?.accent;
     if (accent) {
@@ -835,8 +928,11 @@ export async function mountStory<T extends StoryText>(
     }
     if (!view) {
       // The scene still reads: its text is on screen. Nothing to wait for.
-      report(new Error(`Missing view for scene ${scene.id}`));
+      const missing = new Error(`Missing view for scene ${scene.id}`);
+      report(missing);
       firstView();
+      // Text only: no globe of its own to snapshot.
+      shown.settle(missing);
       return;
     }
     try {
@@ -855,6 +951,7 @@ export async function mountStory<T extends StoryText>(
       syncKey();
       loading.hide();
       firstView();
+      shown.settle();
       const next = story.scenes[index + 1];
       const nextView = next && viewOf(next);
       if (nextView) {
@@ -867,6 +964,7 @@ export async function mountStory<T extends StoryText>(
         }
         report(error);
         firstView(error);
+        shown.settle(error);
       }
     }
   };
@@ -923,6 +1021,7 @@ export async function mountStory<T extends StoryText>(
 
   const destroy = () => {
     firstView(new Error("Story unmounted"));
+    activation?.settle(new Error("The story was destroyed"));
     abort.abort();
     win?.removeEventListener("scroll", onScroll);
     if (scrubFrame) {
@@ -944,7 +1043,39 @@ export async function mountStory<T extends StoryText>(
   };
   // A rejection nobody awaits must not surface as an unhandled one.
   ready.catch(() => {});
-  return { ready, destroy };
+  return {
+    ready,
+    snapshot: async ({ scene, ...image }: StorySnapshotOptions = {}) => {
+      if (scene === undefined) {
+        return projversor.snapshot(image);
+      }
+      const index = story.scenes.findIndex((item) => item.id === scene);
+      if (index < 0) {
+        throw new Error(`No scene ${scene} in this story`);
+      }
+      const timeout = AbortSignal.any([
+        abort.signal,
+        AbortSignal.timeout(SNAPSHOT_SHOW_MS),
+      ]);
+      stepEls[index].scrollIntoView({ block: "center" });
+      const showing = await activationOf(index, timeout);
+      await Promise.race([
+        showing.shown,
+        new Promise<never>((_, reject) =>
+          timeout.addEventListener("abort", () =>
+            reject(new Error(`Scene ${scene} did not show`)),
+          ),
+        ),
+      ]);
+      // The frame with the camera at rest (morph and inset eased in).
+      const blob = await projversor.snapshot({ ...image, settled: true });
+      if (activation !== showing) {
+        throw new Error(`Scene ${scene} is no longer shown`);
+      }
+      return blob;
+    },
+    destroy,
+  };
 }
 
 /** No archive starts this early: before it, the playhead is not a date. */

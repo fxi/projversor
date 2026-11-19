@@ -349,6 +349,17 @@ describe("ProjversorStoryView", () => {
     ]);
   });
 
+  it("clears the stack for a bare view", async () => {
+    const { pv, calls } = fakeProjversor();
+    const story = new ProjversorStoryView(pv, false);
+    await story.activate(scene("a", { layer: "surface-wind" }));
+    calls.length = 0;
+    await story.activate(scene("b", {}));
+    expect(calls).toContainEqual(["remove", "story-layer-0"]);
+    expect(calls.some((c) => c[0] === "replace")).toBe(false);
+    expect(story.layers).toEqual([]);
+  });
+
   it("restores coastlines after a view hides them", async () => {
     const { pv, calls } = fakeProjversor();
     const story = new ProjversorStoryView(pv, false);
@@ -524,9 +535,34 @@ describe("parseProjversorView layers", () => {
     ).toThrow("views.probe.config.playback.speed must be one of");
   });
 
+  it("accepts a bare view: no layer, the globe and its overlays", () => {
+    for (const config of [stacked({}), stacked({ layers: [] })]) {
+      const parsed = parseProjversorView(config);
+      expect(parsed.layers).toEqual([]);
+      expect(parsed.layer).toBeUndefined();
+    }
+    expect(
+      parseProjversorView(
+        stacked({ coastlines: false, playback: { time: "2025-01-15" } }),
+      ).layers,
+    ).toEqual([]);
+  });
+
+  it("rejects what a bare view cannot show", () => {
+    expect(() => parseProjversorView(stacked({ tint: "" }))).toThrow(
+      "views.probe.config.tint needs a layer",
+    );
+    expect(() =>
+      parseProjversorView(stacked({ style: { palette: "viridis" } })),
+    ).toThrow("views.probe.config.style needs a layer");
+    expect(() =>
+      parseProjversorView(stacked({ playback: { speed: 20 } })),
+    ).toThrow("views.probe.config.playback.speed needs a layer");
+  });
+
   it("rejects a malformed stack with its path", () => {
-    expect(() => parseProjversorView(stacked({ layers: [] }))).toThrow(
-      "views.probe.config.layers must be a non-empty array",
+    expect(() => parseProjversorView(stacked({ layers: {} }))).toThrow(
+      "views.probe.config.layers must be an array",
     );
     expect(() => parseProjversorView(view({ layers: fires() }))).toThrow(
       "views.probe.config.layer is set in layers, not next to them",

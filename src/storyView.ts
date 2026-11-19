@@ -52,8 +52,11 @@ export interface ProjversorViewConfig {
    * layer. A single layer can be written flat, as `layer`, `tint`, `style`.
    */
   layers: ProjversorViewLayer[];
-  /** The bottom layer's id: `layers[0].layer`. */
-  layer: string;
+  /**
+   * The bottom layer's id: `layers[0].layer`. Undefined for a bare view,
+   * one without layers: the globe, its graticule, coastlines and GeoJSON.
+   */
+  layer?: string;
   /** The bottom layer's tint: `layers[0].tint`. */
   tint?: string;
   /** The bottom layer's style: `layers[0].style`. */
@@ -196,10 +199,7 @@ export function parseProjversorView(
   const path = `views.${view.id}.config`;
   const stack = view.config.layers;
   if (stack !== undefined) {
-    invariant(
-      Array.isArray(stack) && stack.length > 0,
-      `${path}.layers must be a non-empty array`,
-    );
+    invariant(Array.isArray(stack), `${path}.layers must be an array`);
     // The first format's style keys too: they would style no layer.
     for (const key of [...LAYER_KEYS, "palette", "vibrant"]) {
       invariant(
@@ -208,17 +208,29 @@ export function parseProjversorView(
       );
     }
   }
+  // No layer at all: the bare globe, its graticule, coastlines and GeoJSON.
+  // Nothing then to tint, style or play.
+  const bare = stack
+    ? (stack as unknown[]).length === 0
+    : view.config.layer === undefined;
+  if (bare) {
+    for (const key of ["tint", "style", "palette", "vibrant", "speed"]) {
+      invariant(view.config[key] === undefined, `${path}.${key} needs a layer`);
+    }
+  }
   // The bottom layer's kind, for the first format's flat keys.
-  const bottom = findLayer(
-    String(
-      stack ? (stack[0] as { layer?: unknown })?.layer : view.config.layer,
-    ),
-  );
+  const bottom = bare
+    ? undefined
+    : findLayer(
+        String(
+          stack ? (stack[0] as { layer?: unknown })?.layer : view.config.layer,
+        ),
+      );
   invariant(
-    bottom,
+    bare || bottom,
     `${path}.${stack ? "layers.0.layer" : "layer"} is not a projversor layer`,
   );
-  const config = migrateLegacy(view.config, path, bottom.kind);
+  const config = migrateLegacy(view.config, path, bottom?.kind ?? "scalar");
   for (const key of Object.keys(config)) {
     invariant(KEYS.has(key), `${path}.${key} is not a projversor view key`);
   }
@@ -226,18 +238,23 @@ export function parseProjversorView(
     ? (stack as unknown[]).map((entry, i) =>
         parseViewLayer(entry, `${path}.layers.${i}`),
       )
-    : [
-        parseViewLayer(
-          Object.fromEntries(LAYER_KEYS.map((key) => [key, config[key]])),
-          path,
-        ),
-      ];
+    : bare
+      ? []
+      : [
+          parseViewLayer(
+            Object.fromEntries(LAYER_KEYS.map((key) => [key, config[key]])),
+            path,
+          ),
+        ];
   invariant(
     layers.filter((entry) => findLayer(entry.layer)!.kind === "vector")
       .length <= 1,
     `${path}.layers holds more than one vector layer`,
   );
-  invariant(findPreset(String(config.preset)), `${path}.preset is unknown`);
+  invariant(
+    typeof config.preset === "string" && findPreset(config.preset),
+    `${path}.preset is unknown`,
+  );
   if (config.rotate !== undefined) {
     invariant(
       Array.isArray(config.rotate) &&
@@ -264,9 +281,14 @@ export function parseProjversorView(
       );
     }
     invariant(
+      playback.speed === undefined || bottom,
+      `${path}.playback.speed needs a layer`,
+    );
+    invariant(
       playback.speed === undefined ||
+        !bottom ||
         SPEEDS[bottom.kind].includes(playback.speed as number),
-      `${path}.playback.speed must be one of ${SPEEDS[bottom.kind].join(", ")}`,
+      `${path}.playback.speed must be one of ${bottom ? SPEEDS[bottom.kind].join(", ") : ""}`,
     );
     invariant(
       playback.time === undefined ||

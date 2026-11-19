@@ -468,6 +468,11 @@ export class Camera {
     }
   }
 
+  /** No morph, inset ease or drag running: the view is at rest. */
+  get settled(): boolean {
+    return !this.transition && !this.insetTransition && !this.drag;
+  }
+
   /** Advance the running transitions to `now`. */
   animate(now: number): void {
     this.animateInset(now);

@@ -852,6 +852,31 @@ export class Projversor {
     this.events.clear();
   }
 
+  /**
+   * The next frame as an image, as on screen: background, overlays and
+   * layers at the canvas resolution (CSS size × device pixel ratio, up to 2).
+   * For a poster or a fallback image.
+   */
+  async snapshot(
+    options: {
+      type?: string;
+      quality?: number;
+      /** Wait for the camera at rest: no morph, inset ease or drag. */
+      settled?: boolean;
+      timeoutMs?: number;
+    } = {},
+  ): Promise<Blob> {
+    const image = await this.requireStage().capture(options);
+    return new Promise((resolve, reject) =>
+      image.toBlob(
+        (blob) =>
+          blob ? resolve(blob) : reject(new Error("projversor: no snapshot")),
+        options.type ?? "image/png",
+        options.quality,
+      ),
+    );
+  }
+
   private requireStage(): Stage {
     if (!this.stage || this.destroyed) {
       throw new Error("projversor: call init() first");

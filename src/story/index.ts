@@ -13,6 +13,7 @@ export {
   sceneLegend,
   type MountStoryOptions,
   type MountedStory,
+  type StorySnapshotOptions,
   type StoryDocuments,
   type StoryLabels,
   type StoryLayout,
@@ -33,3 +34,4 @@ export {
 export type { StepLabels } from "./progress";
 export { isContentPath } from "./contentPath";
 export { paragraphs } from "./paragraphs";
+export { authoringGuide } from "./guide";

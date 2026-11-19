@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseLegendConfig, rampTicks } from "./legend";
-import { sceneInset } from "./mount";
+import { authoringGuide } from "./guide";
+import { parseStory, sceneCatalogId, sceneInset } from "./mount";
 import {
   fractionAt,
   monthTicks,
@@ -102,5 +103,101 @@ describe("sceneInset", () => {
       bottom: 240,
       left: 0,
     });
+  });
+});
+
+describe("parseStory", () => {
+  const documents = (config: Record<string, unknown>) => [
+    {
+      schemaVersion: 1,
+      defaultLocale: "en",
+      title: { en: "Probe" },
+      themes: {
+        default: {
+          background: "#000",
+          foreground: "#fff",
+          muted: "#888",
+          accent: "#7fd4ff",
+          accentSoft: "rgba(127, 212, 255, 0.18)",
+          surface: "rgba(0, 0, 0, 0.7)",
+        },
+      },
+      scenes: [
+        {
+          id: "intro",
+          name: { en: "Intro" },
+          theme: "default",
+          layout: "left",
+          blocks: [
+            {
+              id: "intro-view",
+              type: "view",
+              slot: "stage",
+              view: "globe",
+              presentation: "background",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      schemaVersion: 1,
+      views: [{ id: "globe", type: "projversor", config }],
+    },
+  ];
+
+  it("accepts a bare globe", () => {
+    const [story, views] = documents({ preset: "globe" });
+    expect(parseStory(story, views).views.views).toHaveLength(1);
+  });
+
+  it("checks each view's config, not only when its scene shows", () => {
+    const [story, views] = documents({ preset: "globe", layer: "nope" });
+    expect(() => parseStory(story, views)).toThrow(
+      "views.globe.config.layer is not a projversor layer",
+    );
+    const [other, unknown] = documents({ preset: "nope" });
+    expect(() => parseStory(other, unknown)).toThrow(
+      "views.globe.config.preset is unknown",
+    );
+    const [listed, list] = documents({ preset: ["globe"] });
+    expect(() => parseStory(listed, list)).toThrow(
+      "views.globe.config.preset is unknown",
+    );
+  });
+});
+
+describe("authoringGuide", () => {
+  it("lists the layouts, presets and layers this version renders", () => {
+    const guide = authoringGuide();
+    expect(guide).toContain("`stage`");
+    expect(guide).toContain("`globe` (Globe)");
+    expect(guide).toMatch(/\| `surface-wind` \| particles \|/);
+    // One line per layer id.
+    const ids = [...guide.matchAll(/^\| `([^`]+)` \|/gm)].map((m) => m[1]);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe("sceneCatalogId", () => {
+  const scene = {
+    id: "s",
+    name: { en: "S" },
+    theme: "d",
+    layout: "left",
+    blocks: [
+      { id: "v", type: "view" as const, slot: "stage" as const, view: "v" },
+    ],
+  };
+  const views = (config: Record<string, unknown>) =>
+    new Map([["v", { id: "v", type: "projversor", config }]]);
+
+  it("names the layer a scene shows, none for a bare globe", () => {
+    expect(sceneCatalogId(scene, views({ layer: "sst" }))).toBe("sst");
+    expect(sceneCatalogId(scene, views({ layers: [{ layer: "pm2-5" }] }))).toBe(
+      "pm2-5",
+    );
+    expect(sceneCatalogId(scene, views({ preset: "globe" }))).toBeNull();
+    expect(sceneCatalogId(scene, views({ layers: [] }))).toBeNull();
   });
 });

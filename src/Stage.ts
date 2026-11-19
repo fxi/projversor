@@ -100,6 +100,13 @@ export class Stage {
   private lastMove = 0;
   private detailed = false;
   private last = 0;
+  /** Waiting for the next frame as one image: see {@link capture}. */
+  private captures: Array<{
+    /** Wait for a frame with the camera at rest. */
+    settled: boolean;
+    resolve: (canvas: HTMLCanvasElement) => void;
+    reject: (error: Error) => void;
+  }> = [];
 
   constructor(
     readonly canvases: ProjversorCanvases,
@@ -115,6 +122,10 @@ export class Stage {
       throw new Error("WebGL2 is required");
     }
     this.gl = gl;
+    // No frame comes while the context is lost: settle the captures now.
+    canvases.gl.addEventListener("webglcontextlost", () =>
+      this.rejectCaptures(new Error("projversor: WebGL context lost")),
+    );
     this.particles = new SphereParticles(gl);
     this.raster = new SphereScalar(gl);
     this.overlay = new Overlay(
@@ -219,6 +230,12 @@ export class Stage {
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     this.hooks.draw(frame, now, now - this.lastMove < MOVE_SETTLE_MS, panels);
+    if (this.captures.length) {
+      // Same task as the draw: the GL buffer still holds this frame, so no
+      // preserveDrawingBuffer (and its cost on every frame) is needed. A
+      // failed capture rejects; the loop goes on.
+      this.settleCaptures();
+    }
     this.scissor(null);
     this.events.emit("frame", undefined);
     this.frameId = requestAnimationFrame((t) => this.tick(t));
@@ -274,15 +291,130 @@ export class Stage {
     }
   }
 
+  /**
+   * The next frame as one image, at the canvases' resolution: the stage's
+   * background, then the back overlay, the GL layers and the front overlay,
+   * stacked as on screen. Rejects when no frame can come: a lost GL
+   * context, an empty stage, or none drawn within `timeoutMs` (a hidden
+   * page draws none).
+   */
+  capture(
+    options: { settled?: boolean; timeoutMs?: number } = {},
+  ): Promise<HTMLCanvasElement> {
+    const { settled = false, timeoutMs = 10_000 } = options;
+    const unusable = this.unusable();
+    if (unusable) {
+      return Promise.reject(unusable);
+    }
+    return new Promise((resolve, reject) => {
+      const entry = {
+        settled,
+        resolve: (image: HTMLCanvasElement) => {
+          clearTimeout(timer);
+          resolve(image);
+        },
+        reject: (error: Error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      };
+      const timer = setTimeout(() => {
+        this.captures = this.captures.filter((other) => other !== entry);
+        reject(new Error("projversor: no frame drawn"));
+      }, timeoutMs);
+      this.captures.push(entry);
+    });
+  }
+
+  /** Why no frame can be captured now, if none can. */
+  private unusable(): Error | undefined {
+    if (this.destroyed) {
+      return new Error("projversor: destroyed");
+    }
+    if (this.gl.isContextLost()) {
+      return new Error("projversor: WebGL context lost");
+    }
+    if (!this.canvases.gl.width || !this.canvases.gl.height) {
+      return new Error("projversor: the stage has no size");
+    }
+    return undefined;
+  }
+
+  private rejectCaptures(error: Error): void {
+    for (const { reject } of this.captures.splice(0)) {
+      reject(error);
+    }
+  }
+
+  /**
+   * Answer the pending captures with the frame just drawn; those waiting
+   * for a camera at rest keep waiting while it moves.
+   */
+  private settleCaptures(): void {
+    const unusable = this.unusable();
+    if (unusable) {
+      this.rejectCaptures(unusable);
+      return;
+    }
+    const atRest = this.camera.settled;
+    const ready = this.captures.filter((entry) => atRest || !entry.settled);
+    if (!ready.length) {
+      return;
+    }
+    this.captures = this.captures.filter((entry) => !ready.includes(entry));
+    try {
+      const image = this.compose();
+      ready.forEach(({ resolve }) => resolve(image));
+    } catch (error) {
+      const reason = error instanceof Error ? error : new Error(String(error));
+      ready.forEach(({ reject }) => reject(reason));
+    }
+  }
+
+  private compose(): HTMLCanvasElement {
+    const { stage, back, gl, front } = this.canvases;
+    const image = document.createElement("canvas");
+    image.width = gl.width;
+    image.height = gl.height;
+    const context = image.getContext("2d");
+    if (!context) {
+      throw new Error("projversor: no 2D canvas for the snapshot");
+    }
+    const background = backgroundOf(stage);
+    if (background) {
+      context.fillStyle = background;
+      context.fillRect(0, 0, image.width, image.height);
+    }
+    for (const canvas of [back, gl, front]) {
+      context.drawImage(canvas, 0, 0, image.width, image.height);
+    }
+    return image;
+  }
+
   /** Stop the frame loop and free the GL renderers. Layers go first. */
   destroy(): void {
     if (this.destroyed) {
       return;
     }
     this.destroyed = true;
+    this.rejectCaptures(new Error("projversor: destroyed"));
     cancelAnimationFrame(this.frameId);
     this.resizer.disconnect();
     this.particles.destroy();
     this.raster.destroy();
   }
+}
+
+/**
+ * The color painted behind the canvases: the first opaque background up
+ * from `element`, as the page shows it. Undefined if none is set.
+ */
+function backgroundOf(element: Element): string | undefined {
+  for (let node: Element | null = element; node; node = node.parentElement) {
+    const color = getComputedStyle(node).backgroundColor;
+    if (color && color !== "transparent" && !/^rgba\(.*,\s*0\)$/.test(color)) {
+      return color;
+    }
+  }
+  return undefined;
 }
