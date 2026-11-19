@@ -418,6 +418,8 @@ export class ProjversorStoryView {
   /** Aborted by the next activation: the current one stops between steps. */
   private superseded = new AbortController();
   private queue: Promise<void> = Promise.resolve();
+  /** The GeoJSON on the sphere, serialized: null when there is none. */
+  private geojson: string | null = null;
 
   /**
    * Show a view. Activations run one at a time: one called while another
@@ -442,10 +444,16 @@ export class ProjversorStoryView {
       return;
     }
     const pv = this.projversor;
-    // A view without GeoJSON clears the previous one.
-    await pv.remove(VIEW_GEOJSON);
-    if (config.geojson) {
-      await pv.add(VIEW_GEOJSON, "geojson", config.geojson);
+    // A view without GeoJSON clears the previous one; the same GeoJSON stays,
+    // so regions shared by two views (or a story edited in place) never blink.
+    const geojson = config.geojson ? JSON.stringify(config.geojson) : null;
+    if (geojson !== this.geojson) {
+      await pv.remove(VIEW_GEOJSON);
+      this.geojson = null;
+      if (config.geojson) {
+        await pv.add(VIEW_GEOJSON, "geojson", config.geojson);
+        this.geojson = geojson;
+      }
     }
     const state = projversorState(config);
     await pv.update({

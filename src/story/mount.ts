@@ -487,7 +487,40 @@ export interface MountedStory {
    * Optional so stories mounted by other means still fit this type.
    */
   snapshot?(options?: StorySnapshotOptions): Promise<Blob>;
+  /**
+   * Edit the story in place, e.g. from an editor's live preview: the
+   * sphere, its layers and the scroll stay, and only the scenes that
+   * changed render again. Settles once the active scene's view shows;
+   * rejects if it cannot. Labels and locale stay the mount's: mount again
+   * to change them. Optional so stories mounted by other means still fit.
+   */
+  update?(documents: StoryDocuments): Promise<void>;
   destroy(): void;
+}
+
+/** One scene of a mount: its step, its stage hosts and widgets. */
+interface SceneParts {
+  id: string;
+  /** What the scene renders from: equal, its elements are kept. */
+  print: string;
+  step: HTMLElement;
+  stage: HTMLElement[];
+  hosts: WidgetHosts;
+  /** Mounted once the sphere runs; undefined until then. */
+  widgets?: StoryWidgetInstance[];
+  /** Aborts the widgets' work once the scene is dropped. */
+  controller: AbortController;
+}
+
+/** What a mount renders from its documents, rendered again by `update`. */
+interface StoryContent {
+  story: StoryDocument;
+  viewById: ReadonlyMap<string, StoryViewDefinition>;
+  numbers: ReadonlyMap<string, number | null>;
+  scenes: SceneParts[];
+  stepEls: HTMLElement[];
+  legends: (LegendConfig | null)[];
+  ids: string[];
 }
 
 /** @deprecated Kept for the old option names; use `MountStoryOptions`. */
@@ -535,7 +568,6 @@ export async function mountStory<T extends StoryText>(
     : source instanceof URL
       ? source
       : new URL(doc.baseURI);
-  const hosts: WidgetHosts = new Map();
   const widgetsByName = mountOptions.widgets ?? {};
   // The body below predates the option object: same names, one place.
   const options: StorySlotOptions = {
@@ -547,12 +579,6 @@ export async function mountStory<T extends StoryText>(
     timelineLabel: labels.timeline,
     methodLabel: labels.method,
     deepLink: mountOptions.deepLink,
-  };
-  const numbers = sceneNumbers(story);
-  const viewById = new Map(views.views.map((view) => [view.id, view]));
-  const viewOf = (scene: StoryScene): StoryViewDefinition | undefined => {
-    const id = sceneViewId(scene);
-    return id ? viewById.get(id) : undefined;
   };
   const reduced = Boolean(
     win?.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -572,51 +598,101 @@ export async function mountStory<T extends StoryText>(
   steps.className = "zs-steps";
   // The live catalog, once per story: falls back to the bundled one.
   const catalog = loadCatalog().then((loaded) => loaded.catalog);
-  const stepEls = story.scenes.map((scene, i) =>
-    renderStep(
-      doc,
-      story,
-      scene,
-      i,
-      numbers.get(scene.id) ?? null,
-      options.t,
-      hosts,
-      {
-        label: options.methodLabel,
-        href: catalog.then((data) =>
-          methodLink(sceneCatalogId(scene, viewById), data),
-        ),
-      },
-    ),
-  );
-  steps.append(...stepEls);
-  // Chapter progress, with the scroll invitation on the first step.
-  const progress = mountProgress(doc, {
-    names: story.scenes.map((scene) => options.t.text(scene.name)),
-    numbers: story.scenes.map((scene) => numbers.get(scene.id) ?? null),
-    steps: stepEls,
-    line: LINE,
-    reduced,
-    label: options.t.text(story.title),
-    scrollLabel: options.scrollLabel,
-    stepLabels: options.stepLabels,
-  });
   // Stage widgets take the free side of the sphere while their scene is on.
   const stageWidgets = doc.createElement("div");
   stageWidgets.className = "zs-stage-widgets";
-  const stageHosts = story.scenes.map((scene) =>
-    sceneWidgets(scene)
-      .filter((block) => block.slot === "stage")
-      .map((block) => {
-        const host = widgetHost(doc, block, hosts);
-        host.classList.add("zs-stage-widget");
-        // Placed by its own scene's layout, not the story's current one.
-        host.dataset.layout = scene.layout;
-        stageWidgets.append(host);
-        return host;
-      }),
-  );
-  const legends = story.scenes.map(sceneLegend);
+
+  /**
+   * The part of the mount the documents make: their scenes' steps, stage
+   * hosts and widgets. `update` renders it again, scene by scene: a scene
+   * that renders the same keeps its elements and widgets.
+   */
+  const render = (
+    documents: StoryDocuments,
+    previous?: StoryContent,
+  ): { content: StoryContent; dropped: SceneParts[] } => {
+    const { story, views } = documents;
+    const viewById = new Map(views.views.map((view) => [view.id, view]));
+    const numbers = sceneNumbers(story);
+    const kept = new Map(
+      (previous?.scenes ?? []).map((part) => [part.id, part]),
+    );
+    const scenes = story.scenes.map((scene, i): SceneParts => {
+      const number = numbers.get(scene.id) ?? null;
+      const catalogId = sceneCatalogId(scene, viewById);
+      // All a step and its widgets are made of, besides the mount options.
+      const print = JSON.stringify({
+        scene,
+        number,
+        first: i === 0,
+        continues: sceneContinues(story.scenes[i - 1], scene, options.t.text),
+        accent: story.themes[scene.theme]?.accent ?? null,
+        catalogId,
+      });
+      const old = kept.get(scene.id);
+      if (old?.print === print) {
+        kept.delete(scene.id);
+        return old;
+      }
+      const hosts: WidgetHosts = new Map();
+      const step = renderStep(doc, story, scene, i, number, options.t, hosts, {
+        label: options.methodLabel,
+        href: catalog.then((data) => methodLink(catalogId, data)),
+      });
+      const stageHosts = sceneWidgets(scene)
+        .filter((block) => block.slot === "stage")
+        .map((block) => {
+          const node = widgetHost(doc, block, hosts);
+          node.classList.add("zs-stage-widget");
+          // Placed by its own scene's layout, not the story's current one.
+          node.dataset.layout = scene.layout;
+          return node;
+        });
+      return {
+        id: scene.id,
+        print,
+        step,
+        stage: stageHosts,
+        hosts,
+        controller: new AbortController(),
+      };
+    });
+    return {
+      content: {
+        story,
+        viewById,
+        numbers,
+        scenes,
+        stepEls: scenes.map((part) => part.step),
+        legends: story.scenes.map(sceneLegend),
+        ids: story.scenes.map((scene) => scene.id),
+      },
+      dropped: [...kept.values()],
+    };
+  };
+  let content = render({ story, views }).content;
+  const viewOf = (scene: StoryScene): StoryViewDefinition | undefined => {
+    const id = sceneViewId(scene);
+    return id ? content.viewById.get(id) : undefined;
+  };
+  /** The widget instances of a scene, once mounted. */
+  const widgetsAt = (index: number): StoryWidgetInstance[] =>
+    content.scenes[index]?.widgets ?? [];
+  // Chapter progress, with the scroll invitation on the first step.
+  const progressOf = ({ story, numbers, stepEls }: StoryContent) =>
+    mountProgress(doc, {
+      names: story.scenes.map((scene) => options.t.text(scene.name)),
+      numbers: story.scenes.map((scene) => numbers.get(scene.id) ?? null),
+      steps: stepEls,
+      line: LINE,
+      reduced,
+      label: options.t.text(story.title),
+      scrollLabel: options.scrollLabel,
+      stepLabels: options.stepLabels,
+    });
+  steps.append(...content.stepEls);
+  stageWidgets.append(...content.scenes.flatMap((part) => part.stage));
+  let progress = progressOf(content);
   stage.append(veil, stageWidgets, progress.element, status);
   root.append(stage, steps);
 
@@ -624,13 +700,12 @@ export async function mountStory<T extends StoryText>(
   // Rejects without WebGL2: the caller then shows the fallback slot.
   host.append(root);
   // A hashed scene opens in place: its step, then its view.
-  const ids = story.scenes.map((scene) => scene.id);
   const start =
     options.deepLink && win
-      ? Math.max(0, sceneFromHash(win.location.hash, ids))
+      ? Math.max(0, sceneFromHash(win.location.hash, content.ids))
       : 0;
   if (start > 0) {
-    stepEls[start].scrollIntoView({ block: "center" });
+    content.stepEls[start].scrollIntoView({ block: "center" });
   }
   // Opens on the starting scene's view: no morph from a default globe.
   const first = viewOf(story.scenes[start]);
@@ -651,18 +726,34 @@ export async function mountStory<T extends StoryText>(
     root.remove();
     throw error;
   }
-  const link =
+  const linkOf = ({ ids, stepEls }: StoryContent) =>
     options.deepLink && win
       ? mountDeepLink(win, ids, (index) =>
           stepEls[index].scrollIntoView({ block: "center" }),
         )
       : undefined;
-  const widgets = mountWidgets(story, hosts, widgetsByName, {
-    overlay: root,
-    t: mountOptions.t,
-    signal: abort.signal,
-    contentUrl,
-  });
+  let link = linkOf(content);
+  /** Run the widgets of the scenes rendered anew; kept ones run on. */
+  const mountWidgets = ({ story, scenes }: StoryContent) =>
+    scenes.forEach((part, i) => {
+      part.widgets ??= mountSceneWidgets(
+        story.scenes[i],
+        part.hosts,
+        widgetsByName,
+        {
+          overlay: root,
+          t: mountOptions.t,
+          signal: AbortSignal.any([abort.signal, part.controller.signal]),
+          contentUrl,
+        },
+      );
+    });
+  /** A scene gone from the story, or rendered anew: its widgets stop. */
+  const discard = (part: SceneParts) => {
+    part.controller.abort();
+    part.widgets?.forEach((widget) => safely(() => widget.destroy?.()));
+  };
+  mountWidgets(content);
   // Settles with the first view: hosts keep their static fallback until then.
   let settleReady: (error?: unknown) => void = () => {};
   const ready = new Promise<void>((resolve, reject) => {
@@ -786,7 +877,7 @@ export async function mountStory<T extends StoryText>(
           });
         });
   const inset = (durationMs: number) => {
-    const scene = story.scenes[Math.max(0, active)];
+    const scene = content.story.scenes[Math.max(0, active)];
     const { width, height } = stage.getBoundingClientRect();
     const header =
       parseFloat(
@@ -838,7 +929,7 @@ export async function mountStory<T extends StoryText>(
       return;
     }
     legend.setTime(ms);
-    for (const widget of widgets[active] ?? []) {
+    for (const widget of widgetsAt(active)) {
       widget.time?.(ms);
     }
   });
@@ -846,16 +937,21 @@ export async function mountStory<T extends StoryText>(
   // Behind a stage widget at dim 0 the sphere is hidden, and paused.
   let onScreen = false;
   const sphereHidden = () =>
-    active >= 0 && stageDim(story.scenes[active]) === 0;
+    active >= 0 && stageDim(content.story.scenes[active]) === 0;
   const syncPlaying = () =>
     void projversor.update({
       playing: onScreen && !doc.hidden && !reduced && !sphereHidden(),
     });
 
-  const activate = async (index: number) => {
+  /**
+   * Show the scene at `index`. `quiet`: the story was edited in place, so
+   * no reveal and no progress flourish; a view that changed still morphs.
+   */
+  const activate = async (index: number, quiet = false) => {
     if (index === active) {
       return;
     }
+    const { story, stepEls, scenes, legends } = content;
     const scene = story.scenes[index];
     const view = viewOf(scene);
     const current = ++generation;
@@ -868,10 +964,12 @@ export async function mountStory<T extends StoryText>(
       root.style.setProperty("--zs-accent", accent);
     }
     stepEls.forEach((el, i) => el.classList.toggle("is-active", i === index));
-    progress.setActive(index);
+    progress.setActive(index, quiet);
     link?.set(index);
-    stageHosts.forEach((hosts, i) =>
-      hosts.forEach((node) => node.classList.toggle("is-active", i === index)),
+    scenes.forEach((part, i) =>
+      part.stage.forEach((node) =>
+        node.classList.toggle("is-active", i === index),
+      ),
     );
     const dim = stageDim(scene);
     const showDim = () => {
@@ -894,11 +992,11 @@ export async function mountStory<T extends StoryText>(
     }
     syncPlaying();
     if (previous >= 0) {
-      widgets[previous].forEach((widget) => safely(() => widget.leave?.()));
+      widgetsAt(previous).forEach((widget) => safely(() => widget.leave?.()));
     }
-    widgets[index].forEach((widget) => safely(() => widget.enter?.()));
+    widgetsAt(index).forEach((widget) => safely(() => widget.enter?.()));
     const key = legends[index];
-    const swatches = widgets[index].flatMap((widget) => widget.legend ?? []);
+    const swatches = widgetsAt(index).flatMap((widget) => widget.legend ?? []);
     legend.setKeys(
       key
         ? {
@@ -923,7 +1021,7 @@ export async function mountStory<T extends StoryText>(
         }
       });
     }
-    if (!reduced) {
+    if (!reduced && !quiet) {
       reveal(stepEls[index]);
     }
     if (!view) {
@@ -972,7 +1070,7 @@ export async function mountStory<T extends StoryText>(
   // A stage scene comparing as a grid follows the scroll: the grid unfolds
   // as its step runs past the activation line. At once with reduced motion.
   const scrubbed = (index: number) => {
-    const scene = story.scenes[index];
+    const scene = content.story.scenes[index];
     const compare = scene && viewOf(scene)?.config.compare;
     return (
       scene?.layout === "stage" &&
@@ -987,7 +1085,7 @@ export async function mountStory<T extends StoryText>(
     if (active < 0 || !scrubbed(active)) {
       return;
     }
-    const { top, height } = stepEls[active].getBoundingClientRect();
+    const { top, height } = content.stepEls[active].getBoundingClientRect();
     projversor.setCompareProgress(
       reduced ? 1 : stepProgress(top, height, win?.innerHeight ?? 1, LINE),
     );
@@ -1010,14 +1108,72 @@ export async function mountStory<T extends StoryText>(
   resize.observe(stage);
 
   syncPlaying();
-  const scroller = new StoryScroller(stepEls, (index) => void activate(index), {
-    line: LINE,
-  });
+  const scrollerOf = ({ stepEls }: StoryContent) =>
+    new StoryScroller(stepEls, (index) => void activate(index), {
+      line: LINE,
+    });
+  let scroller = scrollerOf(content);
   // Above the first step, show the starting scene: the hashed one, if any,
   // so `ready` reflects the view the visitor asked for.
   if (scroller.active < 0) {
     void activate(start);
   }
+
+  /**
+   * Edit in place: the sphere, its loaded layers, the key and the scroll
+   * stay; scenes that render the same keep their elements and widgets. The
+   * active scene stays where it is on screen, and its view is applied
+   * again (a changed view morphs to the new one).
+   */
+  const update = async (documents: StoryDocuments): Promise<void> => {
+    if (abort.signal.aborted) {
+      throw new Error("Story unmounted");
+    }
+    const before = content;
+    const was = active;
+    const activeId = was >= 0 ? before.ids[was] : undefined;
+    const anchor =
+      was >= 0 ? before.stepEls[was].getBoundingClientRect().top : undefined;
+    scroller.destroy();
+    link?.destroy();
+    widgetsAt(was).forEach((widget) => safely(() => widget.leave?.()));
+    const { content: next, dropped } = render(documents, before);
+    content = next;
+    dropped.forEach(discard);
+    steps.replaceChildren(...next.stepEls);
+    stageWidgets.replaceChildren(...next.scenes.flatMap((part) => part.stage));
+    root.setAttribute("aria-label", options.t.text(next.story.title));
+    const nextProgress = progressOf(next);
+    progress.element.replaceWith(nextProgress.element);
+    progress.destroy();
+    progress = nextProgress;
+    mountWidgets(next);
+    // The error of the previous draft goes; this one reports its own.
+    status.textContent = "";
+    // The same scene if it is still there, else the one now in its place.
+    let index = activeId === undefined ? -1 : next.ids.indexOf(activeId);
+    if (index < 0) {
+      index = Math.min(Math.max(was, 0), next.ids.length - 1);
+    }
+    if (anchor !== undefined && win) {
+      win.scrollBy(0, next.stepEls[index].getBoundingClientRect().top - anchor);
+    }
+    link = linkOf(next);
+    active = -1;
+    void activate(index, true);
+    const showing = activation;
+    // Created after: its first call finds the scene already active.
+    scroller = scrollerOf(next);
+    try {
+      await showing?.shown;
+    } catch (error) {
+      // Superseded (scrolled on, edited again) is no failure of this draft;
+      // a missing view is reported in the status, as on mount.
+      if (activation === showing && viewOf(next.story.scenes[index])) {
+        throw error;
+      }
+    }
+  };
 
   const destroy = () => {
     firstView(new Error("Story unmounted"));
@@ -1030,7 +1186,7 @@ export async function mountStory<T extends StoryText>(
     offMonth();
     offFrame();
     // One failing widget cleanup must not skip the others, or the rest.
-    widgets.flat().forEach((widget) => safely(() => widget.destroy?.()));
+    content.scenes.forEach(discard);
     legend.destroy();
     scroller.destroy();
     progress.destroy();
@@ -1049,7 +1205,7 @@ export async function mountStory<T extends StoryText>(
       if (scene === undefined) {
         return projversor.snapshot(image);
       }
-      const index = story.scenes.findIndex((item) => item.id === scene);
+      const index = content.ids.indexOf(scene);
       if (index < 0) {
         throw new Error(`No scene ${scene} in this story`);
       }
@@ -1057,7 +1213,7 @@ export async function mountStory<T extends StoryText>(
         abort.signal,
         AbortSignal.timeout(SNAPSHOT_SHOW_MS),
       ]);
-      stepEls[index].scrollIntoView({ block: "center" });
+      content.stepEls[index].scrollIntoView({ block: "center" });
       const showing = await activationOf(index, timeout);
       await Promise.race([
         showing.shown,
@@ -1074,6 +1230,7 @@ export async function mountStory<T extends StoryText>(
       }
       return blob;
     },
+    update,
     destroy,
   };
 }
@@ -1082,49 +1239,44 @@ export async function mountStory<T extends StoryText>(
 const EARLIEST = Date.UTC(1950, 0, 1);
 
 /**
- * Run the widget blocks of every scene in the hosts made for them, in the
- * steps or the stage: the instances, by scene. A widget that throws is left
- * out; the story goes on without it.
+ * Run the widget blocks of a scene in the hosts made for them, in its step
+ * or the stage: its instances. A widget that throws is left out; the story
+ * goes on without it.
  */
-function mountWidgets<T extends StoryText>(
-  story: StoryDocument,
+function mountSceneWidgets<T extends StoryText>(
+  scene: StoryScene,
   hosts: WidgetHosts,
   registry: Readonly<Record<string, StoryWidget<T>>>,
   shared: Pick<StoryWidgetContext<T>, "t" | "signal" | "contentUrl"> & {
     overlay: HTMLElement;
   },
-): StoryWidgetInstance[][] {
-  return story.scenes.map((scene) =>
-    sceneWidgets(scene).flatMap((block) => {
-      const host = hosts.get(block);
-      const widget = Object.prototype.hasOwnProperty.call(
-        registry,
-        block.widget,
-      )
-        ? registry[block.widget]
-        : undefined;
-      if (!host || !widget) {
-        console.error(new Error(`Unknown widget: ${block.widget}`));
-        host?.remove();
-        return [];
-      }
-      try {
-        return [
-          asInstance(
-            widget(host, {
-              ...shared,
-              doc: host.ownerDocument,
-              config: block.config ?? {},
-            }),
-          ),
-        ];
-      } catch (error) {
-        console.error(error);
-        host.remove();
-        return [];
-      }
-    }),
-  );
+): StoryWidgetInstance[] {
+  return sceneWidgets(scene).flatMap((block) => {
+    const host = hosts.get(block);
+    const widget = Object.prototype.hasOwnProperty.call(registry, block.widget)
+      ? registry[block.widget]
+      : undefined;
+    if (!host || !widget) {
+      console.error(new Error(`Unknown widget: ${block.widget}`));
+      host?.remove();
+      return [];
+    }
+    try {
+      return [
+        asInstance(
+          widget(host, {
+            ...shared,
+            doc: host.ownerDocument,
+            config: block.config ?? {},
+          }),
+        ),
+      ];
+    } catch (error) {
+      console.error(error);
+      host.remove();
+      return [];
+    }
+  });
 }
 
 /** Runs a widget hook; a throw is logged, and the story goes on. */

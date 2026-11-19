@@ -115,7 +115,8 @@ export interface ProgressOptions {
 
 export interface Progress {
   element: HTMLElement;
-  setActive(index: number): void;
+  /** `quiet`: no number roll, no name flash (the story was edited in place). */
+  setActive(index: number, quiet?: boolean): void;
   destroy(): void;
 }
 
@@ -349,7 +350,7 @@ export function mountProgress(
   syncButtons();
   return {
     element: nav,
-    setActive(index) {
+    setActive(index, quiet = false) {
       if (index === active) {
         return;
       }
@@ -360,6 +361,9 @@ export function mountProgress(
       number.textContent = n !== null ? pad(n) : "";
       // A prelude step: the number gives way to the scroll invitation.
       nav.classList.toggle("is-first", n === null);
+      if (quiet) {
+        return;
+      }
       if (!reduced && n !== null) {
         number.animate(
           [

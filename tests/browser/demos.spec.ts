@@ -60,6 +60,70 @@ test("story adapter mounts a scroll story", async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test("a scroll story is edited in place", async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto(demoUrl("scroll"));
+  const story = page.locator(".zs-story");
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-ready",
+    "true",
+    LOAD,
+  );
+  // Marks on the sphere and the untouched step: kept nodes keep them.
+  const before = await page.evaluate(() => {
+    const marked = (selector: string) =>
+      Object.assign(document.querySelector(selector)!, { kept: true });
+    marked('[data-projversor="gl"]');
+    marked('[data-scene="pacific"]');
+    return window.scrollY;
+  });
+  type Hook = {
+    story: { update(documents: unknown): Promise<void> };
+    parseStory(story: unknown, views: unknown): unknown;
+    storyJson: { scenes: { blocks: { heading: { en: string } }[] }[] };
+    viewsJson: unknown;
+  };
+  const edit = (change: string) =>
+    page.evaluate(
+      async ({ change }) => {
+        const hook = (window as unknown as { scrollStory: Hook }).scrollStory;
+        const { story, parseStory, viewsJson } = hook;
+        const storyJson = structuredClone(hook.storyJson);
+        if (change === "heading") {
+          storyJson.scenes[0].blocks[1].heading.en = "Edited currents";
+        } else {
+          storyJson.scenes.splice(1, 1);
+        }
+        await story.update(parseStory(storyJson, viewsJson));
+      },
+      { change },
+    );
+  const kept = (selector: string) =>
+    page.evaluate(
+      (selector) =>
+        (document.querySelector(selector) as { kept?: boolean } | null)
+          ?.kept === true,
+      selector,
+    );
+
+  await edit("heading");
+  await expect(story.locator('[data-scene="intro"] h1')).toHaveAttribute(
+    "aria-label",
+    "Edited currents",
+  );
+  expect(await kept('[data-projversor="gl"]')).toBe(true);
+  expect(await kept('[data-scene="pacific"]')).toBe(true);
+  expect(await page.evaluate(() => window.scrollY)).toBe(before);
+  await expect(story.locator(".zs-status")).toHaveText("");
+
+  // A scene dropped: its step goes, the sphere stays.
+  await edit("drop");
+  await expect(story.locator('[data-scene="pacific"]')).toHaveCount(0);
+  expect(await kept('[data-projversor="gl"]')).toBe(true);
+  await expect(story.locator(".zs-status")).toHaveText("");
+  expect(errors).toEqual([]);
+});
+
 test("minimal demo shows its field and regions", async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto(demoUrl("minimal"));

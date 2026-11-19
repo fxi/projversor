@@ -30,6 +30,10 @@ mountStory(document.getElementById("story")!, {
   deepLink: true,
 })
   .then(async (story) => {
+    // Hooks for tests: the mounted story, to edit it in place.
+    Object.assign(window, {
+      scrollStory: { story, parseStory, storyJson, viewsJson },
+    });
     await story.ready;
     // The first view shows: a hook for tests.
     document.body.dataset.ready = "true";

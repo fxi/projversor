@@ -390,6 +390,24 @@ describe("ProjversorStoryView", () => {
     expect(calls.some((c) => c[0] === "add")).toBe(false);
   });
 
+  it("keeps the same GeoJSON from one view to the next", async () => {
+    const { pv, calls } = fakeProjversor();
+    const story = new ProjversorStoryView(pv, false);
+    const geojson = () => ({ data: { type: "Point", coordinates: [0, 0] } });
+    await story.activate(
+      scene("a", { layer: "surface-wind", geojson: geojson() }),
+    );
+    calls.length = 0;
+    await story.activate(
+      scene("b", { layer: "surface-wind", geojson: geojson() }),
+    );
+    expect(calls.some((c) => c[1] === "story-geojson")).toBe(false);
+    const moved = { data: { type: "Point", coordinates: [1, 0] } };
+    await story.activate(scene("c", { layer: "surface-wind", geojson: moved }));
+    expect(calls).toContainEqual(["remove", "story-geojson"]);
+    expect(calls).toContainEqual(["add", "story-geojson", "geojson"]);
+  });
+
   it("adds a stack bottom up, the bottom one on the clock", async () => {
     const { pv, calls, ids } = fakeProjversor();
     const story = new ProjversorStoryView(pv, false);
