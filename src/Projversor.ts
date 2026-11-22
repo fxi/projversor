@@ -1,6 +1,8 @@
-import type {
-  CatalogGeoVideoSource,
-  LayerStyleInput,
+import {
+  resolveEntryStyle,
+  type CatalogGeoVideoSource,
+  type LayerStyle,
+  type LayerStyleInput,
 } from "@fxi/zartigl/catalog";
 import {
   gradeToColorGrade,
@@ -22,7 +24,7 @@ import {
   type GeoJSONLayer,
   type GeoJSONStyle,
 } from "./geojson";
-import { findLayer, type ProjversorLayer } from "./layers";
+import { findLayer, layerEntry, type ProjversorLayer } from "./layers";
 import type { RampOptions } from "./scales";
 import { parseOverlayColors, type OverlayColors } from "./Overlay";
 import {
@@ -218,6 +220,15 @@ export class FieldLayerHandle {
   /** The style override over the source's own. */
   get style(): LayerStyleInput {
     return this.field.viewStyle;
+  }
+
+  /**
+   * The style the layer is drawn with: engine defaults, catalog, layer, then
+   * the override. Controls start from it.
+   */
+  get resolvedStyle(): LayerStyle {
+    const layer = this.field.layer;
+    return resolveEntryStyle(layerEntry(layer), layer.style, this.style);
   }
 
   /** Particle color grade of the resolved style. */

@@ -1,8 +1,6 @@
 import { mergeStyles, styleForKind } from "@fxi/zartigl/catalog";
 import type { LayerStyleInput } from "@fxi/zartigl/catalog";
-import { colorGradeToGrade, type ColorGrade } from "@fxi/zartigl/engine";
 import {
-  PRESETS,
   PROJVERSOR_LAYERS,
   Projversor,
   SPEEDS,
@@ -13,13 +11,13 @@ import {
   findPreset,
   formatUnit,
   isTintFor,
-  layerPalettes,
   layerSearchText,
   legendTicks,
   loadLayers,
   linearTicks,
   monthLegend,
   playheadLabel,
+  rampConic,
   rampGradient,
   rampPosition,
   timeTicks,
@@ -31,16 +29,44 @@ import {
   type ShareState,
 } from "../../src";
 import { Compass } from "./Compass";
-import { GradePanel } from "./GradePanel";
-import { LayerPicker, type PickItem } from "./LayerPicker";
+import type { PickItem } from "./LayerPicker";
+import { Toolbar, glyph, type Tool } from "./panel";
+import {
+  ExportPanel,
+  LayersPanel,
+  PalettePanel,
+  ProjectionPanel,
+  VectorPanel,
+} from "./panels";
 
 /** Zoom button factor and rotate button step (degrees of longitude). */
 const ZOOM_STEP = 1.5;
 const ROTATE_STEP = 15;
-/** How long the Share button confirms the copy. */
-const COPIED_MS = 1500;
 /** Id of the one layer the explorer shows. */
 const FIELD = "field";
+
+/** Glyphs of the tool buttons, 24px strokes. */
+const ICONS = {
+  palette: [
+    "M12 3a9 9 0 1 0 0 18c1.2 0 1.8-.9 1.4-1.9-.4-1.1.3-2.4 1.6-2.4H17a4 4 0 0 0 4-4C21 7.1 17 3 12 3Z",
+    "M7.5 12h.01M9.5 7.8h.01M14.5 7.8h.01M16.8 11.5h.01",
+  ],
+  vector: [
+    "M3 8.5h10.5a2.5 2.5 0 1 0-2.5-2.5",
+    "M3 15.5h14.5a2.5 2.5 0 1 1-2.5 2.5",
+    "M3 12h7",
+  ],
+  layers: [
+    "M12 3.5 3 8l9 4.5L21 8l-9-4.5Z",
+    "M3 12.2l9 4.5 9-4.5",
+    "M3 16.4l9 4.5 9-4.5",
+  ],
+  projection: [
+    "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
+    "M3 12h18M12 3c-5 5.5-5 12.5 0 18M12 3c5 5.5 5 12.5 0 18",
+  ],
+  export: ["M12 14.5V3.5M7.5 8 12 3.5 16.5 8", "M5 11.5V20h14v-8.5"],
+};
 
 function refs(root: HTMLElement) {
   const get = <T extends Element>(name: string): T => {
@@ -52,6 +78,7 @@ function refs(root: HTMLElement) {
   };
   return {
     stage: get<HTMLElement>("stage"),
+    tools: get<HTMLElement>("tools"),
     provider: get<HTMLElement>("provider"),
     projectionName: get<HTMLElement>("projectionName"),
     status: get<HTMLElement>("status"),
@@ -68,39 +95,39 @@ function refs(root: HTMLElement) {
     play: get<HTMLButtonElement>("play"),
     month: get<HTMLSelectElement>("month"),
     speed: get<HTMLSelectElement>("speed"),
-    palette: get<HTMLSelectElement>("palette"),
-    gradeToggle: get<HTMLButtonElement>("gradeToggle"),
-    gradePanel: get<HTMLFormElement>("gradePanel"),
     unit: get<HTMLElement>("unit"),
     speedKey: get<HTMLElement>("speedKey"),
     speedMax: get<HTMLElement>("speedMax"),
     ramp: get<HTMLElement>("ramp"),
     ticks: get<HTMLElement>("ticks"),
-    projection: get<HTMLSelectElement>("projection"),
-    layer: get<HTMLButtonElement>("layer"),
-    tintField: get<HTMLElement>("tintField"),
-    tint: get<HTMLButtonElement>("tint"),
-    share: get<HTMLButtonElement>("share"),
   };
 }
 
 const layerType = (layer: ProjversorLayer) =>
   layer.kind === "vector" ? "particles" : "scalar";
 
-/** The projversor controls: rail, pickers, timeline, legend and share. */
+/**
+ * The projversor controls: the tool panels (palette, vector, layers,
+ * projection, export) at the bottom left, the rail with timeline, month,
+ * speed and legend on the right.
+ */
 class ProjectionDemo {
   private readonly ui: ReturnType<typeof refs>;
   private readonly projversor: Projversor;
   private readonly shared: Partial<ShareState>;
   private readonly compass: Compass;
-  private readonly gradePanel: GradePanel;
-  private readonly layerPicker: LayerPicker;
-  private readonly tintPicker: LayerPicker;
+  private readonly toolbar: Toolbar;
+  private readonly palettePanel: PalettePanel;
+  private readonly vectorPanel: VectorPanel;
+  private readonly layersPanel: LayersPanel;
+  private readonly projectionPanel: ProjectionPanel;
+  private readonly exportPanel: ExportPanel;
+  private readonly paletteTool: Tool;
+  private readonly vectorTool: Tool;
   /** The shown layer, once opened. */
   private field: FieldLayerHandle | null = null;
   /** Timeline thumb held: playback waits for its release. */
   private scrubbing = false;
-  private copiedTimer = 0;
 
   constructor(root: HTMLElement) {
     this.ui = refs(root);
@@ -122,31 +149,73 @@ class ProjectionDemo {
       onBearing: (deg) => this.projversor.view.setBearing(deg),
       onToggle: () => this.projversor.view.toggleNorth(),
     });
-    this.gradePanel = new GradePanel(
-      this.ui.gradeToggle,
-      this.ui.gradePanel,
-      (grade) => this.setGrade(grade),
-    );
     const run = (task: Promise<void>) =>
       task.catch((error: unknown) => this.fail(error));
-    this.layerPicker = new LayerPicker(this.ui.layer, {
-      placeholder: "Search layers: currents, ozone, leman…",
-      onPick: (id) => {
+    const restyle = (style: LayerStyleInput) => this.restyle(style);
+
+    this.palettePanel = new PalettePanel(restyle);
+    this.vectorPanel = new VectorPanel(restyle);
+    this.layersPanel = new LayersPanel({
+      onLayer: (id) => {
         const next = findLayer(id);
         if (next) {
           void run(this.open(next, { frame: true }));
         }
       },
-    });
-    this.tintPicker = new LayerPicker(this.ui.tint, {
-      placeholder: "Color particles by…",
-      onPick: (id) => {
+      onTint: (id) => {
         const field = this.field;
         if (field) {
           void run(this.open(field.source, { tint: id || null }));
         }
       },
     });
+    this.projectionPanel = new ProjectionPanel((id) => {
+      if (findPreset(id)) {
+        this.projversor.view.goTo({ preset: id });
+      }
+    });
+    this.exportPanel = new ExportPanel((text) => this.setStatus(text));
+
+    const toolbar = new Toolbar(this.ui.tools, this.ui.stage);
+    this.toolbar = toolbar;
+    this.paletteTool = toolbar.add({
+      id: "palette",
+      label: "Palette",
+      icon: glyph(ICONS.palette),
+      onOpen: () => this.field && this.palettePanel.sync(this.field, true),
+    });
+    this.paletteTool.button.classList.add("tool-palette");
+    this.paletteTool.body.append(this.palettePanel.el);
+    this.vectorTool = toolbar.add({
+      id: "vector",
+      label: "Particles",
+      icon: glyph(ICONS.vector),
+      onOpen: () => this.field && this.vectorPanel.sync(this.field),
+    });
+    this.vectorTool.body.append(this.vectorPanel.el);
+    toolbar
+      .add({
+        id: "layers",
+        label: "Layer",
+        icon: glyph(ICONS.layers),
+        onOpen: () => this.layersPanel.picker.reset(),
+      })
+      .body.append(this.layersPanel.el);
+    toolbar
+      .add({
+        id: "projection",
+        label: "Projection",
+        icon: glyph(ICONS.projection),
+      })
+      .body.append(this.projectionPanel.el);
+    toolbar
+      .add({
+        id: "export",
+        label: "Share and export",
+        icon: glyph(ICONS.export),
+        onOpen: () => this.syncExport(),
+      })
+      .body.append(this.exportPanel.el);
   }
 
   /** Create the renderer and open the shared state. Rejects without WebGL2. */
@@ -178,7 +247,6 @@ class ProjectionDemo {
       timeRange: shared.timeRange,
       frame: !hasView,
     });
-    this.gradePanel.value = this.field!.grade;
   }
 
   /** Show `layer` in place of the shown one, once its month is decoded. */
@@ -197,12 +265,10 @@ class ProjectionDemo {
   private restyle(style: LayerStyleInput): void {
     const field = this.field;
     if (field) {
-      void field.update(mergeStyles(field.style, style));
+      void field
+        .update(mergeStyles(field.style, style))
+        .catch((error: unknown) => this.fail(error));
     }
-  }
-
-  private setGrade(grade: ColorGrade): void {
-    this.restyle({ particles: { grade: colorGradeToGrade(grade) } });
   }
 
   private bindRenderer(): void {
@@ -217,12 +283,19 @@ class ProjectionDemo {
       this.buildLegend(month);
     });
     p.on("palette", ({ palette, ramp }) => {
-      this.ui.palette.value = palette;
       this.ui.ramp.style.background = rampGradient(palette, ramp);
+      this.paletteTool.button.style.setProperty(
+        "--swatch",
+        rampConic(palette, ramp),
+      );
+      this.palettePanel.showPalette(palette, ramp);
+      if (this.field && this.paletteTool.open) {
+        this.palettePanel.sync(this.field);
+      }
     });
     p.on("playing", (playing) => this.setPlaying(playing));
     p.on("preset", (preset) => {
-      this.ui.projection.value = preset.id;
+      this.projectionPanel.value = preset.id;
       this.ui.projectionName.textContent = preset.label;
     });
     p.on("north", (locked) => (this.compass.locked = locked));
@@ -245,10 +318,10 @@ class ProjectionDemo {
     });
   }
 
-  /** Month, layer, tint, speed and palette pickers for the open layer. */
+  /** Month and speed pickers, and the panels, for the open layer. */
   private syncLayer(field: FieldLayerHandle): void {
     const layer = field.source;
-    const { month, tintField, speed, palette } = this.ui;
+    const { month, speed } = this.ui;
     month.replaceChildren(
       ...field.chunks.map(
         (chunk, i) =>
@@ -262,37 +335,43 @@ class ProjectionDemo {
     this.ui.provider.textContent = providerLabel(
       field.chunks[0]?.provenance?.provider,
     );
-    this.layerPicker.value = layer.id;
-    tintField.hidden = layer.kind !== "vector";
-    this.gradePanel.available = layer.kind === "vector";
-    this.tintPicker.setItems([
-      {
-        id: "",
-        label: "Speed",
-        detail: "Brightness and color by speed",
-        group: "Particle color",
-      },
-      ...tintLayersFor(layer).map((l) => pickItem(l, "Color by", l.entryId)),
-    ]);
-    this.tintPicker.value = field.tint ?? "";
+    const vector = layer.kind === "vector";
+    this.layersPanel.picker.value = layer.id;
+    this.layersPanel.setTints(
+      vector
+        ? [
+            {
+              id: "",
+              label: "Speed",
+              detail: "Brightness and color by speed",
+              group: "Particle color",
+            },
+            ...tintLayersFor(layer).map((l) =>
+              pickItem(l, "Color by", l.entryId),
+            ),
+          ]
+        : null,
+      field.tint ?? "",
+    );
+    this.vectorTool.disabled = !vector;
+    this.vectorTool.button.title = vector
+      ? "Particles"
+      : "Particles: open a flow layer (currents, wind, waves)";
     speed.replaceChildren(
       ...SPEEDS[layer.kind].map((s) => new Option(`${s}×`, String(s))),
     );
     speed.value = String(field.speed);
-    palette.replaceChildren(
-      ...layerPalettes(layer).map((pal) => new Option(pal.label, pal.id)),
-    );
-    palette.value = field.palette;
+    this.palettePanel.sync(field);
+    if (this.vectorTool.open) {
+      this.vectorPanel.sync(field);
+    }
   }
 
   private buildPickers(activePreset: string): void {
-    const { projection } = this.ui;
-    projection.replaceChildren(
-      ...PRESETS.map((preset) => new Option(preset.label, preset.id)),
-    );
-    projection.value = activePreset;
-    this.ui.projectionName.textContent = projection.selectedOptions[0].text;
-    this.layerPicker.setItems(
+    this.projectionPanel.value = activePreset;
+    this.ui.projectionName.textContent =
+      findPreset(activePreset)?.label ?? activePreset;
+    this.layersPanel.picker.setItems(
       PROJVERSOR_LAYERS.map((l) =>
         pickItem(l, l.kind === "vector" ? "Flows" : undefined),
       ),
@@ -301,14 +380,9 @@ class ProjectionDemo {
 
   private bindControls(): void {
     const p = this.projversor;
-    const { projection, month, speed, palette } = this.ui;
+    const { month, speed } = this.ui;
     const run = (task: Promise<void>) =>
       task.catch((error: unknown) => this.fail(error));
-    projection.addEventListener("change", () => {
-      if (findPreset(projection.value)) {
-        p.view.goTo({ preset: projection.value });
-      }
-    });
     month.addEventListener("change", () => {
       if (this.field) {
         void run(this.field.openMonth(Number(month.value)));
@@ -317,14 +391,10 @@ class ProjectionDemo {
     speed.addEventListener("change", () => {
       void run(p.update({ speed: Number(speed.value) }));
     });
-    palette.addEventListener("change", () =>
-      this.restyle({ palette: palette.value }),
-    );
 
     this.ui.play.addEventListener("click", () => {
       void p.update({ playing: !p.playing });
     });
-    this.ui.share.addEventListener("click", () => this.share());
     this.ui.zoomIn.addEventListener("click", () => p.view.zoomBy(ZOOM_STEP));
     this.ui.zoomOut.addEventListener("click", () =>
       p.view.zoomBy(1 / ZOOM_STEP),
@@ -396,29 +466,16 @@ class ProjectionDemo {
     };
   }
 
-  /** Copy a link to the displayed view. */
-  private share(): void {
-    if (!this.field) {
+  /** The export panel shows the view as it is now. */
+  private syncExport(): void {
+    const field = this.field;
+    if (!field) {
       return;
     }
+    const state = this.state(field);
     const url = new URL(location.href);
-    url.hash = encodeShare(this.state(this.field));
-    // navigator.clipboard is missing outside secure contexts.
-    Promise.resolve()
-      .then(() => navigator.clipboard.writeText(url.href))
-      .then(
-        () => {
-          const button = this.ui.share;
-          button.classList.add("copied");
-          button.setAttribute("aria-label", "Link copied");
-          clearTimeout(this.copiedTimer);
-          this.copiedTimer = window.setTimeout(() => {
-            button.classList.remove("copied");
-            button.setAttribute("aria-label", "Share");
-          }, COPIED_MS);
-        },
-        () => this.setStatus(url.href),
-      );
+    url.hash = encodeShare(state);
+    this.exportPanel.set(state, url.href, field.source.label);
   }
 
   private setPlaying(playing: boolean): void {
@@ -448,6 +505,10 @@ class ProjectionDemo {
     this.ui.speedKey.hidden = !tint;
     const legend = monthLegend({ field, tint });
     this.ui.unit.textContent = legend.unit;
+    this.palettePanel.setLegend(legend);
+    if (this.field && this.paletteTool.open) {
+      this.palettePanel.sync(this.field);
+    }
     if (legend.ramp === "linear") {
       this.ui.ticks.replaceChildren(
         ...linearTicks(legend.min, legend.max).map((t) =>

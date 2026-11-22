@@ -27,14 +27,13 @@ function score(item: PickItem, terms: readonly string[]): number {
 let uid = 0;
 
 /**
- * A chip in the layer bar that opens a searchable list above it: type to
- * filter, arrows to move, Enter to pick, Escape or a click outside to close.
+ * A searchable list of layers, inside a panel: type to filter, arrows to
+ * move, Enter or a click to pick.
  */
 export class LayerPicker {
-  private readonly popover = document.createElement("div");
+  readonly el = document.createElement("div");
   private readonly input = document.createElement("input");
   private readonly list = document.createElement("ul");
-  private readonly text: HTMLElement;
   private items: PickItem[] = [];
   private shown: PickItem[] = [];
   private active = 0;
@@ -42,18 +41,13 @@ export class LayerPicker {
   private readonly prefix = `pick${uid++}`;
 
   constructor(
-    private readonly button: HTMLButtonElement,
     private readonly options: {
+      label: string;
       placeholder: string;
       onPick: (id: string) => void;
     },
   ) {
-    this.text = button.querySelector<HTMLElement>(".chip-text") ?? button;
-    button.setAttribute("aria-haspopup", "listbox");
-    button.setAttribute("aria-expanded", "false");
-
-    this.popover.className = "pick";
-    this.popover.hidden = true;
+    this.el.className = "pick";
     this.input.className = "pick-search";
     this.input.type = "search";
     this.input.placeholder = options.placeholder;
@@ -62,16 +56,13 @@ export class LayerPicker {
     this.input.setAttribute("role", "combobox");
     this.input.setAttribute("aria-expanded", "true");
     this.input.setAttribute("aria-controls", `${this.prefix}-list`);
-    this.input.setAttribute("aria-label", button.getAttribute("aria-label")!);
+    this.input.setAttribute("aria-label", options.label);
     this.list.className = "pick-list";
     this.list.id = `${this.prefix}-list`;
     this.list.setAttribute("role", "listbox");
-    this.popover.append(this.input, this.list);
-    document.body.append(this.popover);
+    this.list.setAttribute("aria-label", options.label);
+    this.el.append(this.input, this.list);
 
-    button.addEventListener("click", () =>
-      this.popover.hidden ? this.open() : this.close(),
-    );
     this.input.addEventListener("input", () => this.render());
     this.input.addEventListener("keydown", (event) => this.onKey(event));
     this.list.addEventListener("pointermove", (event) => {
@@ -86,26 +77,12 @@ export class LayerPicker {
         this.pick(this.shown[index]);
       }
     });
-    document.addEventListener("pointerdown", (event) => {
-      const target = event.target as Node;
-      if (
-        !this.popover.hidden &&
-        !this.popover.contains(target) &&
-        !this.button.contains(target)
-      ) {
-        this.close();
-      }
-    });
-    window.addEventListener("resize", () => this.place());
   }
 
-  /** Replace the choices; the current one keeps its label if still there. */
+  /** Replace the choices. */
   setItems(items: readonly PickItem[]): void {
     this.items = [...items];
-    this.value = this.current;
-    if (!this.popover.hidden) {
-      this.render();
-    }
+    this.render();
   }
 
   get value(): string {
@@ -114,49 +91,19 @@ export class LayerPicker {
 
   set value(id: string) {
     this.current = id;
-    const item = this.items.find((i) => i.id === id);
-    this.text.textContent = item?.label ?? "";
-    this.button.title = item?.detail
-      ? `${item.label} · ${item.detail}`
-      : (item?.label ?? "");
-  }
-
-  open(): void {
-    this.input.value = "";
-    this.popover.hidden = false;
-    this.button.setAttribute("aria-expanded", "true");
     this.render();
-    this.place();
-    this.input.focus();
   }
 
-  close(refocus = false): void {
-    if (this.popover.hidden) {
-      return;
-    }
-    this.popover.hidden = true;
-    this.button.setAttribute("aria-expanded", "false");
-    if (refocus) {
-      this.button.focus();
-    }
+  /** Label of the current choice. */
+  get label(): string {
+    return this.items.find((i) => i.id === this.current)?.label ?? "";
   }
 
-  /** Above the chip, inside the window. */
-  private place(): void {
-    if (this.popover.hidden) {
-      return;
-    }
-    const chip = this.button.getBoundingClientRect();
-    const margin = 8;
-    const width = Math.min(420, window.innerWidth - 2 * margin);
-    const left = Math.min(
-      Math.max(margin, chip.left),
-      window.innerWidth - width - margin,
-    );
-    this.popover.style.left = `${left}px`;
-    this.popover.style.width = `${width}px`;
-    this.popover.style.bottom = `${window.innerHeight - chip.top + margin}px`;
-    this.popover.style.maxHeight = `${Math.max(160, chip.top - 2 * margin)}px`;
+  /** Clear the search, show the current choice, focus the search field. */
+  reset(): void {
+    this.input.value = "";
+    this.render();
+    this.input.focus({ preventScroll: true });
   }
 
   private render(): void {
@@ -205,7 +152,7 @@ export class LayerPicker {
     if (!rows.length) {
       const empty = document.createElement("li");
       empty.className = "pick-empty";
-      empty.textContent = "No match";
+      empty.textContent = "No layer matches. Try another word.";
       rows.push(empty);
     }
     this.list.replaceChildren(...rows);
@@ -223,8 +170,16 @@ export class LayerPicker {
     }
     row.classList.add("active");
     this.input.setAttribute("aria-activedescendant", row.id);
-    if (scroll) {
-      row.scrollIntoView({ block: "nearest" });
+    // Scrolled within the list only: the stage around it must not move.
+    const list = this.list;
+    if (scroll && list.clientHeight) {
+      const top = row.offsetTop;
+      const bottom = top + row.offsetHeight;
+      if (top < list.scrollTop) {
+        list.scrollTop = top;
+      } else if (bottom > list.scrollTop + list.clientHeight) {
+        list.scrollTop = bottom - list.clientHeight;
+      }
     }
   }
 
@@ -237,29 +192,15 @@ export class LayerPicker {
       case "ArrowUp":
         this.setActive(Math.max(0, this.active - 1), true);
         break;
-      case "Home":
-        this.setActive(0, true);
-        break;
-      case "End":
-        this.setActive(Math.max(0, last), true);
-        break;
       case "Enter":
         if (this.shown[this.active]) {
           this.pick(this.shown[this.active]);
         }
         break;
-      case "Escape":
-        this.close(true);
-        break;
-      case "Tab":
-        this.close();
-        return;
       default:
         return;
     }
     event.preventDefault();
-    // Keep Space and arrows from reaching the page's playback keys.
-    event.stopPropagation();
   }
 
   private indexOf(target: EventTarget | null): number {
@@ -268,7 +209,6 @@ export class LayerPicker {
   }
 
   private pick(item: PickItem): void {
-    this.close(true);
     if (item.id !== this.current) {
       this.value = item.id;
       this.options.onPick(item.id);

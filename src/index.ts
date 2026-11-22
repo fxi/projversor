@@ -79,3 +79,5 @@ export type {
   ProjversorViewDefinition,
   ProjversorViewLayer,
 } from "./storyView";
+export { sceneStub, slugId, viewEntry } from "./viewExport";
+export type { ProjversorViewEntry, StorySceneStub } from "./viewExport";

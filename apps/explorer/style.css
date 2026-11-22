@@ -14,8 +14,6 @@
   --rail: 96px;
   /* Height of the floating clock, above the rail. */
   --clock: 96px;
-  /* Height of the layer bar and of the rail actions row beside it. */
-  --bar: 48px;
   /* Range thumb length; the timeline ticks follow its travel. */
   --thumb: 28px;
   --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%238a8fa3' stroke-width='1.2'%3E%3Cpath d='m1 1.5 5 5 5-5'/%3E%3C/svg%3E");
@@ -42,12 +40,11 @@ body {
   overflow: hidden;
 }
 
-/* Map over the layer bar, the rail beside both; the clock floats on top. */
+/* Map, the rail beside it; the clock floats on top. */
 .app {
   position: relative;
   display: grid;
   grid-template-columns: 1fr var(--rail);
-  grid-template-rows: 1fr var(--bar);
   height: 100dvh;
 }
 
@@ -209,7 +206,7 @@ body {
 /* ---- rail --------------------------------------------------------------- */
 
 .rail {
-  grid-area: 1 / 2 / 3 / 3;
+  grid-area: 1 / 2;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -339,133 +336,13 @@ body {
   border-radius: 1px;
 }
 
-/* Stacked pickers: month and speed, then the palette under the legend. */
+/* Stacked pickers: month and speed. */
 .controls {
   display: grid;
 }
 
 .controls .picker + .picker {
   border-top: 1px solid var(--line);
-}
-
-/* Icon actions on one row at the rail foot, level with the layer bar. */
-.actions {
-  margin-top: auto;
-  height: var(--bar);
-  display: flex;
-  align-items: stretch;
-  justify-content: space-between;
-}
-
-.action {
-  appearance: none;
-  position: relative;
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.action[hidden] {
-  display: none;
-}
-
-.action:hover,
-.action:focus-within,
-.action[aria-expanded="true"] {
-  color: var(--ink);
-}
-
-/* A select stays clickable, transparent, over its icon. */
-.action .picker {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-}
-
-.action:focus-visible,
-.action:has(.picker:focus-visible),
-.grade-reset:focus-visible {
-  outline: 1px solid var(--muted);
-  outline-offset: -1px;
-}
-
-.share .icon-copied,
-.share.copied .icon-share {
-  display: none;
-}
-
-.share.copied .icon-copied {
-  display: block;
-}
-
-.grade {
-  position: absolute;
-  z-index: 2;
-  right: calc(100% + var(--gap));
-  bottom: var(--bar);
-  width: 220px;
-  display: grid;
-  gap: 12px;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  background: rgba(7, 8, 17, 0.85);
-  backdrop-filter: blur(10px);
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.grade[hidden] {
-  display: none;
-}
-
-.grade label {
-  display: grid;
-  gap: 6px;
-}
-
-.grade .grade-switch {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.grade input[type="checkbox"] {
-  margin: 0;
-  accent-color: var(--ink);
-}
-
-.grade input[type="range"] {
-  width: 100%;
-  margin: 0;
-  accent-color: var(--ink);
-}
-
-.grade input:disabled {
-  opacity: 0.4;
-}
-
-.grade-reset {
-  appearance: none;
-  justify-self: start;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  cursor: pointer;
-}
-
-.grade-reset:hover {
-  color: var(--ink);
 }
 
 .legend {
@@ -514,67 +391,6 @@ body {
   border-radius: 2px;
 }
 
-/* ---- footer ------------------------------------------------------------- */
-
-/* Layer bar docked under the map, styled like the rail. */
-.bar {
-  grid-area: 2 / 1;
-  min-width: 0;
-  display: flex;
-  border-top: 1px solid var(--line);
-  background: var(--bg);
-}
-
-.field {
-  position: relative;
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 18px;
-  color: var(--muted);
-}
-
-.field[hidden] {
-  display: none;
-}
-
-.field:hover,
-.field:focus-within {
-  color: var(--ink);
-}
-
-.field + .field::before {
-  content: "";
-  position: absolute;
-  top: 12px;
-  bottom: 12px;
-  left: 0;
-  border-left: 1px solid var(--line);
-}
-
-.icon {
-  flex: none;
-  width: 22px;
-  height: 22px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-/* Same text as the rail pickers; the icon is muted until hovered. */
-.field .picker {
-  flex: 1;
-  height: 100%;
-  padding: 0 20px 0 0;
-  background-position: right 0 center;
-  font-size: 13px;
-  text-overflow: ellipsis;
-}
-
 /* Native select, styled as plain text with a chevron. */
 .picker {
   appearance: none;
@@ -595,7 +411,8 @@ body {
 }
 
 .picker:focus-visible,
-.round:focus-visible {
+.round:focus-visible,
+.tool-panel :focus-visible {
   outline: 1px solid var(--muted);
   outline-offset: -1px;
 }
@@ -605,50 +422,381 @@ body {
   color: var(--ink);
 }
 
-/* Bar button opening a layer list; reads like the select it replaced. */
-.chip {
+/* ---- tools -------------------------------------------------------------- */
+
+/* Round tool buttons up the bottom left, as the map controls on the right. */
+.tools {
+  position: absolute;
+  left: var(--gap);
+  bottom: var(--gap);
   display: flex;
-  align-items: center;
-  text-align: left;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.chip-text {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+.round[aria-expanded="true"] {
+  border-color: var(--ink);
+  background: rgba(4, 5, 11, 0.9);
+}
+
+.round:disabled {
+  color: var(--muted);
+  border-style: dashed;
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* The palette button is ringed with the drawn palette. */
+.tool-palette {
+  border-color: transparent;
+  background:
+    radial-gradient(
+      circle closest-side,
+      rgba(4, 5, 11, 0.88) calc(100% - 3.5px),
+      transparent calc(100% - 3px)
+    ),
+    var(--swatch, var(--muted));
+}
+
+.tool-palette:hover,
+.tool-palette[aria-expanded="true"] {
+  border-color: transparent;
+  background:
+    radial-gradient(
+      circle closest-side,
+      rgba(4, 5, 11, 0.95) calc(100% - 5px),
+      transparent calc(100% - 4.5px)
+    ),
+    var(--swatch, var(--ink));
+}
+
+/* ---- tool panel --------------------------------------------------------- */
+
+/* Thin outline, no inner rules: space separates, inputs are underlined. */
+.tool-panel {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: rgba(7, 8, 17, 0.9);
+  backdrop-filter: blur(12px);
+  color: var(--ink);
+  font-size: 12.5px;
+  cursor: default;
+  touch-action: auto;
+}
+
+.tool-panel[hidden] {
+  display: none;
+}
+
+/* Points at the button that opened the panel. */
+.tool-arrow {
+  position: absolute;
+  left: -6px;
+  width: 10px;
+  height: 10px;
+  margin-top: -5px;
+  border-left: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: rgb(9, 10, 19);
+  transform: rotate(45deg);
+}
+
+.tool-title {
+  flex: none;
+  margin: 0;
+  padding: 14px 18px 4px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.tool-body {
+  min-height: 0;
+  padding: 0 18px 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.tool-section {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.tool-section[hidden] {
+  display: none;
+}
+
+.tool-section h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* Label and value on a line, the slider under them. */
+.tool-range {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  row-gap: 2px;
+}
+
+.tool-range output {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tool-range.disabled {
+  color: var(--muted);
+}
+
+/* Same hand as the timeline: hairline track, played part in ink, pill thumb. */
+.tool-range input {
+  grid-column: 1 / -1;
+  appearance: none;
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  background: linear-gradient(
+      to right,
+      var(--ink) calc(var(--p, 0) * 100%),
+      var(--line) 0
+    )
+    no-repeat center / 100% 2px;
+  cursor: pointer;
+}
+
+.tool-range input::-webkit-slider-thumb {
+  appearance: none;
+  width: 8px;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--ink);
+}
+
+.tool-range input::-moz-range-thumb {
+  width: 8px;
+  height: 16px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--ink);
+}
+
+.tool-range input:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.tool-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+}
+
+/* A switch: a hairline track whose knob turns to ink when on. */
+.tool-toggle input {
+  appearance: none;
+  flex: none;
+  position: relative;
+  width: 28px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--muted);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.tool-toggle input::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.tool-toggle input:checked {
+  border-color: var(--ink);
+}
+
+.tool-toggle input:checked::after {
+  background: var(--ink);
+  transform: translateX(12px);
+}
+
+/* Inputs and selects: text on an underline. */
+.tool-field {
+  display: grid;
+  gap: 2px;
+  color: var(--muted);
+}
+
+.tool-field input,
+.tool-select,
+.pick-search {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  outline: none;
+}
+
+/* The underline turns to ink: the focus ring of these fields. */
+.tool-field input:focus,
+.tool-select:focus,
+.pick-search:focus {
+  border-bottom-color: var(--ink);
+  outline: none;
+}
+
+.tool-select {
+  appearance: none;
+  padding-right: 18px;
+  background: var(--chevron) no-repeat right 2px center / 12px 8px;
+  cursor: pointer;
+}
+
+.tool-select option {
+  background: var(--panel);
+}
+
+.tool-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.tool-color {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.tool-color input {
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.tool-color input:disabled {
+  opacity: 0.35;
+}
+
+.tool-button {
+  appearance: none;
+  justify-self: start;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.tool-button:hover {
+  color: var(--ink);
+  text-decoration-color: currentColor;
+}
+
+.tool-button.done {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+/* ---- palette panel ------------------------------------------------------ */
+
+.palette-preview {
+  height: 14px;
+  border-radius: 2px;
+}
+
+.palette-ends {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: -4px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.palette-list {
+  position: relative;
+  display: grid;
+  max-height: 232px;
+  margin: 0 -8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.palette-list h4 {
+  margin: 10px 8px 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 400;
+}
+
+.palette-list h4:first-child {
+  margin-top: 0;
+}
+
+.palette-row {
+  appearance: none;
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px 4px 6px;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.palette-row:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.palette-row[aria-pressed="true"] {
+  border-left-color: var(--equator);
+  color: var(--ink);
+}
+
+.palette-swatch {
+  height: 10px;
+  border-radius: 2px;
 }
 
 /* ---- layer list --------------------------------------------------------- */
 
 .pick {
-  position: fixed;
-  z-index: 20;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--panel);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
-  color: var(--ink);
-  font-size: 13px;
-  overflow: hidden;
-}
-
-.pick[hidden] {
-  display: none;
-}
-
-.pick-search {
-  flex: none;
-  margin: 0;
-  padding: 12px 14px;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  background: transparent;
-  color: var(--ink);
-  font: inherit;
-  font-size: 14px;
-  outline: none;
+  gap: 6px;
+  margin-top: 12px;
 }
 
 .pick-search::placeholder {
@@ -656,34 +804,32 @@ body {
 }
 
 .pick-list {
-  flex: 1 1 auto;
-  min-height: 0;
-  margin: 0;
-  padding: 4px 0 8px;
+  position: relative;
+  max-height: min(46vh, 360px);
+  margin: 0 -8px;
+  padding: 0;
   list-style: none;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
 .pick-group {
-  padding: 10px 14px 4px;
+  padding: 10px 8px 4px;
   color: var(--muted);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 11.5px;
 }
 
 .pick-item {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: 6px 14px 6px 12px;
+  padding: 5px 8px 5px 6px;
   border-left: 2px solid transparent;
   cursor: pointer;
 }
 
 .pick-item.active {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .pick-item[aria-selected="true"] {
@@ -696,8 +842,72 @@ body {
 }
 
 .pick-empty {
-  padding: 12px 14px;
+  padding: 10px 8px;
   color: var(--muted);
+}
+
+/* ---- projection panel --------------------------------------------------- */
+
+.projection-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 12px;
+  margin: 12px -8px 0;
+}
+
+.projection-choice {
+  appearance: none;
+  padding: 7px 8px 7px 6px;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.projection-choice:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.projection-choice[aria-pressed="true"] {
+  border-left-color: var(--equator);
+  color: var(--ink);
+}
+
+/* ---- export panel ------------------------------------------------------- */
+
+.export-link {
+  overflow: hidden;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Code to paste, quiet and scrollable on a slightly darker ground. */
+.export-code {
+  max-height: 140px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--muted);
+  font:
+    11px/1.45 ui-monospace,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace;
+  overflow: auto;
+  white-space: pre;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tool-toggle input::after {
+    transition: none;
+  }
 }
 
 @media (max-width: 640px) {
@@ -705,7 +915,6 @@ body {
     --gap: 12px;
     --rail: 80px;
     --clock: 84px;
-    --bar: 44px;
   }
 
   .date {
@@ -731,22 +940,7 @@ body {
     background-position: right 0 center;
   }
 
-  .field {
-    gap: 6px;
-    padding: 0 10px;
-  }
-
-  .icon {
-    width: 18px;
-    height: 18px;
-  }
-
-  .field .picker {
-    font-size: 12px;
-  }
-
-  /* Three actions in the 64px between the cell margins. */
-  .action {
-    width: 20px;
+  .tools {
+    gap: 8px;
   }
 }

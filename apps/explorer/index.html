@@ -26,6 +26,11 @@
           <span data-ref="provider"></span>
         </p>
         <p class="status" data-ref="status" role="status"></p>
+        <div
+          class="tools"
+          data-ref="tools"
+          role="toolbar"
+          aria-label="Map settings"></div>
         <div class="map-controls">
           <button
             type="button"
@@ -140,118 +145,7 @@
             </div>
           </div>
         </section>
-        <section class="cell controls">
-          <select
-            class="picker"
-            data-ref="palette"
-            aria-label="Palette"></select>
-        </section>
-        <section class="cell actions">
-          <button
-            type="button"
-            class="action"
-            data-ref="gradeToggle"
-            aria-controls="grade-panel"
-            aria-expanded="false"
-            title="Color settings"
-            aria-label="Color settings">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="3" />
-              <path
-                d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" />
-            </svg>
-          </button>
-          <label class="action" title="Projection">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="9" />
-              <path
-                d="M3 12h18M12 3c-5 5.5-5 12.5 0 18M12 3c5 5.5 5 12.5 0 18" />
-            </svg>
-            <select
-              class="picker"
-              data-ref="projection"
-              aria-label="Projection"></select>
-          </label>
-          <button
-            type="button"
-            class="action share"
-            data-ref="share"
-            title="Copy a link to this view"
-            aria-label="Share">
-            <svg class="icon icon-share" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 15V3M7.5 7.5 12 3l4.5 4.5M5 11v9h14v-9" />
-            </svg>
-            <svg
-              class="icon icon-copied"
-              viewBox="0 0 24 24"
-              aria-hidden="true">
-              <path d="m5 12.5 4.5 4.5L19 7.5" />
-            </svg>
-          </button>
-        </section>
-        <form
-          class="grade"
-          id="grade-panel"
-          data-ref="gradePanel"
-          aria-label="Color settings"
-          hidden>
-          <label class="grade-switch">
-            <input type="checkbox" name="enabled" />
-            Enhanced colors
-          </label>
-          <label>
-            Exposure
-            <input name="exposure" type="range" min="0" max="4" step="0.05" />
-          </label>
-          <label>
-            Contrast
-            <input name="contrast" type="range" min="0" max="1" step="0.01" />
-          </label>
-          <label>
-            Saturation
-            <input
-              name="saturation"
-              type="range"
-              min="-1"
-              max="1"
-              step="0.01" />
-          </label>
-          <label>
-            Highlights
-            <input name="highlights" type="range" min="0" max="1" step="0.01" />
-          </label>
-          <button type="reset" class="grade-reset">Reset</button>
-        </form>
       </aside>
-
-      <footer class="bar">
-        <div class="field">
-          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M3 8c3-2.5 6 2.5 9 0s6-2.5 9 0M3 13c3-2.5 6 2.5 9 0s6-2.5 9 0M3 18c3-2.5 6 2.5 9 0s6-2.5 9 0" />
-          </svg>
-          <button
-            type="button"
-            class="picker chip"
-            data-ref="layer"
-            aria-label="Layer">
-            <span class="chip-text"></span>
-          </button>
-        </div>
-        <div class="field" data-ref="tintField">
-          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M12 3.5c3.5 4.2 6 7.6 6 10.5a6 6 0 0 1-12 0c0-2.9 2.5-6.3 6-10.5Z" />
-          </svg>
-          <button
-            type="button"
-            class="picker chip"
-            data-ref="tint"
-            aria-label="Particle color">
-            <span class="chip-text"></span>
-          </button>
-        </div>
-      </footer>
     </div>
     <script type="module" src="./main.ts"></script>
   </body>

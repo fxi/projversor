@@ -6,8 +6,13 @@ Vector archives (currents, wind, waves, sea ice) play as animated particles,
 scalar ones (temperature, salinity, biogeochemistry, …) as a raster.
 
 It is the explorer of the `Projversor` API (`../../src`, see the
-repository README): one layer, replaced in place from the pickers, and its
-controls (rail, pickers, timeline, legend, compass, share). `../story` is a
+repository README): one layer, replaced in place, and its controls. On the
+right, the rail: timeline, month, speed and legend. At the bottom left, tool
+buttons open panels (`panel.ts`, `panels.ts`): palette (ringed with the
+drawn one; reverse, raster opacity, vibrance, fades and value range),
+particles (density, speed, trail, glow, backdrop, color grade), layer
+(search and particle color), projection, and share and export (link,
+views.json entry, story.json scene). `../story` is a
 story on the same renderer. zartigl is reached through its package entries
 only (`@fxi/zartigl/engine`, `/catalog`, `/story`).
 
@@ -35,8 +40,7 @@ File names below are in `src/` unless noted.
   (`shaders/draw.vert.glsl`).
 - **Compositing and color grade.** The GL canvas is premultiplied and
   layers blend with `compositeBlend` (`view.ts`), so faded trails keep their
-  coverage. The cog in the actions row at the foot of the rail
-  (with projection and share) opens zartigl's optional particle color
+  coverage. The particles panel holds zartigl's optional particle color
   grade (`lib/color-grade`: exposure, contrast, saturation, highlights),
   applied in the existing trail composite pass, so it toggles live at no extra
   pass cost.
@@ -54,7 +58,7 @@ File names below are in `src/` unless noted.
 - **Versor dragging.** Quaternion rotation (`versor.ts`) keeps the grabbed
   point under the pointer on every projection.
 - **Two-variable layers.** Any scalar layer can color the particles of a
-  vector one (the droplet picker; some layers default to one in `layers.ts`):
+  vector one (particle color, in the layer panel; some layers default to one in `layers.ts`):
   its GeoVideo archive is decoded frame by frame
   (`lib/GeoVideoScalarSource`) next to the vector one, months paired by
   calendar period (`lib/archive-timeline`), and particles take their color from it (`shaders/tint.glsl`)
@@ -72,7 +76,7 @@ File names below are in `src/` unless noted.
   then hold again.
 - **Share.** A readable url hash (`share.ts`) restores layer, time,
   projection, rotation, zoom, play state, speed, tint and the style
-  override (`st`: palette and particle grade, the zartigl layer style).
+  override (`st`: the zartigl layer style the panels edit).
   Older links' palette (`c`) and grade (`g`) still open.
 
 ## Reused from zartigl
