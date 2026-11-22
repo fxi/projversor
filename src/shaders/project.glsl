@@ -25,9 +25,46 @@ float mollweideTheta(float phi) {
     return 0.5 * x;
 }
 
+/** F(φ, k² = ½), PROJ's ell_int_5 Chebyshev series, as projections.ts. */
+float ellInt5(float phi) {
+    // Clenshaw recurrence unrolled: SwiftShader stalls on the array loop.
+    float y0 = phi * 2.0 / PI;
+    float y = 2.0 * y0 * y0 - 1.0;
+    float y2 = 2.0 * y;
+    float d1 = -8.58691003636495e-7;
+    float d2 = 0.0;
+    float t;
+    t = d1; d1 = y2 * d1 - d2 + 2.02692115653689e-7; d2 = t;
+    t = d1; d1 = y2 * d1 - d2 + 3.12960480765314e-5; d2 = t;
+    t = d1; d1 = y2 * d1 - d2 + 5.30394739921063e-5; d2 = t;
+    t = d1; d1 = y2 * d1 - d2 - 0.0012804644680613; d2 = t;
+    t = d1; d1 = y2 * d1 - d2 - 0.00575574836830288; d2 = t;
+    t = d1; d1 = y2 * d1 - d2 + 0.0914203033408211; d2 = t;
+    return phi * (y * d1 - d2 + 0.5 * 2.19174570831038);
+}
+
+/** Adams World in a Square II, unturned square, as projections.ts. */
+vec2 adamsWs2(float lam, float phi) {
+    float spp = tan(0.5 * phi);
+    float a = cos(asin(clamp(spp, -1.0, 1.0))) * sin(0.5 * lam);
+    bool sm = spp + a < 0.0;
+    bool sn = spp - a < 0.0;
+    float b = acos(clamp(spp, -1.0, 1.0));
+    a = acos(clamp(a, -1.0, 1.0));
+    float m = asin(sqrt(max(0.0, 1.0 + min(0.0, cos(a + b)))));
+    float n = asin(sqrt(max(0.0, 1.0 - max(0.0, cos(a - b)))));
+    return vec2(ellInt5(sm ? -m : m), ellInt5(sn ? -n : n));
+}
+
 vec2 rawProject(int id, float lam, float phi) {
     if (id == 0) {
         return vec2(lam, phi);
+    }
+    if (id >= 6) {
+        // One call site for both: SwiftShader compiles every inlined copy.
+        vec2 s = adamsWs2(lam, phi);
+        // 7: turned 45° clockwise, as adamsDiamondRaw.
+        return id == 6 ? s : 0.7071067811865476 * vec2(s.x + s.y, s.y - s.x);
     }
     if (id == 1) {
         // Equal Earth (Šavrič et al.), as d3.geoEqualEarthRaw.
@@ -68,14 +105,10 @@ vec2 rawProject(int id, float lam, float phi) {
 
 /** Blended projection in css px, y down, before the viewport transform. */
 vec2 projectPx(float lam, float phi) {
-    vec2 p;
-    if (u_t <= 0.0) {
-        p = u_ka * rawProject(u_proj_a, lam, phi);
-    } else if (u_t >= 1.0) {
-        p = u_kb * rawProject(u_proj_b, lam, phi);
-    } else {
-        p = mix(u_ka * rawProject(u_proj_a, lam, phi), u_kb * rawProject(u_proj_b, lam, phi), u_t);
-    }
+    // Two call sites, not four: each inlines every projection.
+    vec2 pa = u_t < 1.0 ? u_ka * rawProject(u_proj_a, lam, phi) : vec2(0.0);
+    vec2 pb = u_t > 0.0 ? u_kb * rawProject(u_proj_b, lam, phi) : vec2(0.0);
+    vec2 p = u_t <= 0.0 ? pa : (u_t >= 1.0 ? pb : mix(pa, pb, u_t));
     return u_center + u_zoom * vec2(p.x, -p.y);
 }
 

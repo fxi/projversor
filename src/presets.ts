@@ -59,6 +59,24 @@ export const PRESETS: Preset[] = [
     rotate: [-160, 10, 0],
     zoom: 1.1,
   },
+  {
+    // Spilhaus' world ocean in a square ("the world according to fishes"):
+    // Adams World in a Square II, oblique aspect from PROJ's +proj=spilhaus.
+    id: "spilhaus",
+    label: "Spilhaus square",
+    projection: "adamsWorldSquare2",
+    rotate: [-66.94970198, 49.56371678, 40.17823482],
+    zoom: 1,
+  },
+  {
+    // The same map turned 45° clockwise: Atlantic up, Pacific down.
+    id: "ocean",
+    label: "Spilhaus ocean",
+    projection: "adamsDiamond",
+    rotate: [-66.94970198, 49.56371678, 40.17823482],
+    // The diamond corners are land and the poles: crop to the oceans.
+    zoom: 1.4,
+  },
 ];
 
 export function findPreset(id: string | undefined): Preset | undefined {

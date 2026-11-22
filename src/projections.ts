@@ -19,7 +19,9 @@ export type ProjectionId =
   | "mollweide"
   | "azimuthalEqualArea"
   | "azimuthalEquidistant"
-  | "orthographic";
+  | "orthographic"
+  | "adamsWorldSquare2"
+  | "adamsDiamond";
 
 export interface ProjectionDef {
   id: ProjectionId;
@@ -79,6 +81,142 @@ mollweideRaw.invert = (x: number, y: number): [number, number] => {
 
 const equalEarthRaw = asRaw(geoEqualEarthRaw);
 
+/** Complete elliptic integral K(1/√2): half side of the Adams square. */
+export const ADAMS_K = 1.8540746773013719;
+
+const ELL5_C0 = 2.19174570831038;
+const ELL5_C = [
+  -8.58691003636495e-7, 2.02692115653689e-7, 3.12960480765314e-5,
+  5.30394739921063e-5, -0.0012804644680613, -0.00575574836830288,
+  0.0914203033408211,
+];
+
+/**
+ * Elliptic integral of the first kind F(φ, k² = ½), PROJ's ell_int_5: an
+ * even Chebyshev series, good to 1e-7.
+ */
+export function ellInt5(phi: number): number {
+  const y0 = (phi * 2) / Math.PI;
+  const y = 2 * y0 * y0 - 1;
+  const y2 = 2 * y;
+  let d1 = 0;
+  let d2 = 0;
+  for (const c of ELL5_C) {
+    const t = d1;
+    d1 = y2 * d1 - d2 + c;
+    d2 = t;
+  }
+  return phi * (y * d1 - d2 + 0.5 * ELL5_C0);
+}
+
+const clamp1 = (v: number): number => Math.max(-1, Math.min(1, v));
+
+/**
+ * Adams World in a Square II (PROJ adams_ws2), without PROJ's final 45°
+ * turn: the square has horizontal edges, the poles and the two sides of
+ * (180°, 0°) at its corners. Conformal but at those four points. In the
+ * Spilhaus aspect (presets.ts) the oceans fill the square.
+ */
+const adamsWs2Raw = ((lambda: number, phi: number): [number, number] => {
+  const spp = Math.tan(0.5 * phi);
+  let a = Math.cos(Math.asin(clamp1(spp))) * Math.sin(0.5 * lambda);
+  const sm = spp + a < 0;
+  const sn = spp - a < 0;
+  const b = Math.acos(clamp1(spp));
+  a = Math.acos(clamp1(a));
+  let m = Math.asin(Math.sqrt(Math.max(0, 1 + Math.min(0, Math.cos(a + b)))));
+  let n = Math.asin(Math.sqrt(Math.max(0, 1 - Math.max(0, Math.cos(a - b)))));
+  if (sm) {
+    m = -m;
+  }
+  if (sn) {
+    n = -n;
+  }
+  return [ellInt5(m), ellInt5(n)];
+}) as GeoRawProjection;
+
+/**
+ * Newton inverse, seeded as PROJ does in its diamond frame. NaN outside the
+ * square or where it does not converge.
+ */
+adamsWs2Raw.invert = (x: number, y: number): [number, number] => {
+  const failed: [number, number] = [NaN, NaN];
+  if (Math.abs(x) > ADAMS_K + 1e-9 || Math.abs(y) > ADAMS_K + 1e-9) {
+    return failed;
+  }
+  const dx = Math.SQRT1_2 * (x - y);
+  const dy = Math.SQRT1_2 * (x + y);
+  const half = Math.SQRT2 * ADAMS_K;
+  let phi = clamp1(dy / half) * (Math.PI / 2);
+  let lambda =
+    Math.abs(phi) >= Math.PI / 2
+      ? 0
+      : clamp1(dx / half / Math.cos(phi)) * Math.PI;
+  // Off the singular corners, where the Jacobian vanishes.
+  phi = Math.max(-1.57, Math.min(1.57, phi));
+  lambda = Math.max(-3.14, Math.min(3.14, lambda));
+  const h = 1e-7;
+  const LAMBDA_MAX = Math.PI - 1e-9;
+  const PHI_MAX = Math.PI / 2 - 1e-9;
+  const residual = (l: number, p: number): number => {
+    const [fx, fy] = adamsWs2Raw(l, p);
+    return Math.hypot(fx - x, fy - y);
+  };
+  for (let i = 0; i < 60; i++) {
+    const [fx, fy] = adamsWs2Raw(lambda, phi);
+    const ex = fx - x;
+    const ey = fy - y;
+    const error = Math.hypot(ex, ey);
+    if (error < 1e-10) {
+      return [lambda, phi];
+    }
+    // Step inward so the difference never crosses the cut.
+    const sl = lambda > 0 ? -h : h;
+    const sp = phi > 0 ? -h : h;
+    const [lx, ly] = adamsWs2Raw(lambda + sl, phi);
+    const [px, py] = adamsWs2Raw(lambda, phi + sp);
+    const j11 = (lx - fx) / sl;
+    const j21 = (ly - fy) / sl;
+    const j12 = (px - fx) / sp;
+    const j22 = (py - fy) / sp;
+    const det = j11 * j22 - j12 * j21;
+    if (!Number.isFinite(det) || Math.abs(det) < 1e-14) {
+      break;
+    }
+    const stepL = (j22 * ex - j12 * ey) / det;
+    const stepP = (j11 * ey - j21 * ex) / det;
+    // Backtrack: near the pole corners a full step overshoots onto the
+    // singular point, where the Jacobian vanishes.
+    let s = 1;
+    let nextL = lambda;
+    let nextP = phi;
+    for (let k = 0; k < 30; k++, s *= 0.5) {
+      nextL = Math.max(-LAMBDA_MAX, Math.min(LAMBDA_MAX, lambda - s * stepL));
+      nextP = Math.max(-PHI_MAX, Math.min(PHI_MAX, phi - s * stepP));
+      if (residual(nextL, nextP) < error) {
+        break;
+      }
+    }
+    lambda = nextL;
+    phi = nextP;
+  }
+  const [fx, fy] = adamsWs2Raw(lambda, phi);
+  return Math.hypot(fx - x, fy - y) < 1e-7 ? [lambda, phi] : failed;
+};
+
+/**
+ * The Adams square turned 45° clockwise in the plane, a diamond. A turn of
+ * a non-azimuthal map is no sphere rotation, so it needs its own raw: with
+ * the Spilhaus rotation it stands the Atlantic up and the Pacific down.
+ */
+const adamsDiamondRaw = ((lambda: number, phi: number): [number, number] => {
+  const [x, y] = adamsWs2Raw(lambda, phi);
+  return [Math.SQRT1_2 * (x + y), Math.SQRT1_2 * (y - x)];
+}) as GeoRawProjection;
+
+adamsDiamondRaw.invert = (x: number, y: number): [number, number] =>
+  adamsWs2Raw.invert!(Math.SQRT1_2 * (x - y), Math.SQRT1_2 * (x + y));
+
 export const PROJECTIONS: Record<ProjectionId, ProjectionDef> = {
   equirectangular: {
     id: "equirectangular",
@@ -133,6 +271,24 @@ export const PROJECTIONS: Record<ProjectionId, ProjectionDef> = {
     extent: [1, 1],
     clipAngle: 90,
     azimuthal: true,
+  },
+  adamsWorldSquare2: {
+    id: "adamsWorldSquare2",
+    label: "Adams square II",
+    glslId: 6,
+    raw: adamsWs2Raw,
+    extent: [ADAMS_K, ADAMS_K],
+    clipAngle: 180,
+    azimuthal: false,
+  },
+  adamsDiamond: {
+    id: "adamsDiamond",
+    label: "Adams diamond",
+    glslId: 7,
+    raw: adamsDiamondRaw,
+    extent: [Math.SQRT2 * ADAMS_K, Math.SQRT2 * ADAMS_K],
+    clipAngle: 180,
+    azimuthal: false,
   },
 };
 
