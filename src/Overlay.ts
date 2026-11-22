@@ -57,6 +57,57 @@ export interface OverlayPanel {
   alpha: number;
 }
 
+type Ring = number[][];
+
+/** Polygon rings of any GeoJSON object, as line strings. */
+function ringsOf(object: unknown, rings: Ring[]): Ring[] {
+  const o = object as {
+    type?: string;
+    coordinates?: unknown;
+    geometry?: unknown;
+    geometries?: unknown[];
+    features?: unknown[];
+  } | null;
+  switch (o?.type) {
+    case "FeatureCollection":
+      o.features?.forEach((f) => ringsOf(f, rings));
+      break;
+    case "Feature":
+      ringsOf(o.geometry, rings);
+      break;
+    case "GeometryCollection":
+      o.geometries?.forEach((g) => ringsOf(g, rings));
+      break;
+    case "Polygon":
+      rings.push(...(o.coordinates as Ring[]));
+      break;
+    case "MultiPolygon":
+      for (const polygon of o.coordinates as Ring[][]) {
+        rings.push(...polygon);
+      }
+      break;
+  }
+  return rings;
+}
+
+const coastCache = new WeakMap<object, GeoPermissibleObjects>();
+
+/**
+ * Coastlines of a land layer: its rings as lines. Stroking the polygons
+ * would also stroke the edges d3 adds where a projection cut splits land,
+ * drawing the map border as coast.
+ */
+export function coastlinesOf(
+  land: GeoPermissibleObjects,
+): GeoPermissibleObjects {
+  let coast = coastCache.get(land);
+  if (!coast) {
+    coast = { type: "MultiLineString", coordinates: ringsOf(land, []) };
+    coastCache.set(land, coast);
+  }
+  return coast;
+}
+
 const SPHERE: GeoPermissibleObjects = { type: "Sphere" };
 const GRATICULE = geoGraticule10();
 const EQUATOR: GeoPermissibleObjects = {
@@ -203,7 +254,7 @@ export class Overlay {
 
     if (this.coastlines) {
       ctx.beginPath();
-      path(land);
+      path(coastlinesOf(land));
       ctx.lineWidth = 0.8;
       ctx.strokeStyle = this.colors.coast;
       ctx.stroke();
