@@ -549,6 +549,11 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.tool-range[hidden],
+.tool-field[hidden] {
+  display: none;
+}
+
 .tool-range.disabled {
   color: var(--muted);
 }

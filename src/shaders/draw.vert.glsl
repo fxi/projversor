@@ -16,9 +16,11 @@ uniform mat3 u_rot;         // geographic -> rotated frame
 uniform float u_clip;
 uniform float u_max_jump;   // px; longer segments cross a cut
 // Tinted: color from the tint field over u_tint_domain, brightness from
-// speed. Otherwise color from speed, as zartigl.
+// speed, the slowest dimmed by u_speed_shade. Otherwise color from speed,
+// as zartigl.
 uniform bool u_tinted;
 uniform vec2 u_tint_domain;
+uniform float u_speed_shade;
 
 out float v_color;
 out float v_bright;
@@ -57,7 +59,7 @@ void main() {
             0.0,
             1.0
         );
-        v_bright = mix(0.3, 1.0, speed);
+        v_bright = mix(1.0 - u_speed_shade, 1.0, speed);
     } else {
         v_color = speed;
         v_bright = 1.0;

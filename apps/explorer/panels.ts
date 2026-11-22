@@ -261,7 +261,10 @@ export class VectorPanel {
   private readonly speed: Range;
   private readonly fade: Range;
   private readonly glow: Range;
+  private readonly speedShade: Range;
   private readonly backdrop;
+  private readonly backdropSource = document.createElement("select");
+  private readonly backdropColorField = document.createElement("label");
   private readonly backdropColor = document.createElement("input");
   private readonly backdropOpacity: Range;
   private readonly graded;
@@ -269,7 +272,7 @@ export class VectorPanel {
 
   constructor(private readonly restyle: Restyle) {
     const particle = (
-      key: "density" | "speed" | "fade" | "glow",
+      key: "density" | "speed" | "fade" | "glow" | "speedShade",
       label: string,
       min: number,
       max: number,
@@ -288,12 +291,22 @@ export class VectorPanel {
     this.speed = particle("speed", "Speed", 0.1, 10, 0.1, fixed(1));
     this.fade = particle("fade", "Trail length", 0, 1, 0.01, percent);
     this.glow = particle("glow", "Glow", 0, 1, 0.01, percent);
+    // Colored by another field, speed shows as brightness: 0 keeps it even.
+    this.speedShade = particle(
+      "speedShade",
+      "Dim slow particles",
+      0,
+      1,
+      0.01,
+      percent,
+    );
     const particles = section();
     particles.append(
       this.density.el,
       this.speed.el,
       this.fade.el,
       this.glow.el,
+      this.speedShade.el,
     );
 
     // The backdrop is replaced as a whole: each control sends all of it.
@@ -302,16 +315,31 @@ export class VectorPanel {
         particles: {
           backdrop: {
             enabled: this.backdrop.input.checked,
+            source: this.backdropSource.value as "color" | "field",
             color: this.backdropColor.value,
             opacity: this.backdropOpacity.value,
           },
         },
       });
-    this.backdrop = toggle("Solid color under the trails", () => {
+    this.backdrop = toggle("Fill under the trails", () => {
       this.syncDisabled();
       sendBackdrop();
     });
-    const color = document.createElement("label");
+    const source = document.createElement("label");
+    source.className = "tool-field";
+    const sourceName = document.createElement("span");
+    sourceName.textContent = "Fill with";
+    this.backdropSource.className = "tool-select";
+    this.backdropSource.append(
+      new Option("A color", "color"),
+      new Option("The particle color field", "field"),
+    );
+    this.backdropSource.addEventListener("change", () => {
+      this.syncDisabled();
+      sendBackdrop();
+    });
+    source.append(sourceName, this.backdropSource);
+    const color = this.backdropColorField;
     color.className = "tool-field tool-color";
     const colorName = document.createElement("span");
     colorName.textContent = "Color";
@@ -327,7 +355,7 @@ export class VectorPanel {
       onInput: sendBackdrop,
     });
     const backdrop = section("Backdrop");
-    backdrop.append(this.backdrop.el, color, this.backdropOpacity.el);
+    backdrop.append(this.backdrop.el, source, color, this.backdropOpacity.el);
 
     this.graded = toggle("Enhanced colors", () => {
       this.syncDisabled();
@@ -365,7 +393,13 @@ export class VectorPanel {
     this.speed.value = particles.speed;
     this.fade.value = particles.fade;
     this.glow.value = particles.glow;
+    this.speedShade.value = particles.speedShade;
+    // Only particles colored by another field are shaded or fill with it.
+    const tinted = field.tint !== null;
+    this.speedShade.el.hidden = !tinted;
+    this.backdropSource.options[1].disabled = !tinted;
     this.backdrop.input.checked = particles.backdrop.enabled;
+    this.backdropSource.value = particles.backdrop.source;
     this.backdropColor.value = hex6(particles.backdrop.color);
     this.backdropOpacity.value = particles.backdrop.opacity;
     this.gradeValue = field.grade;
@@ -395,8 +429,11 @@ export class VectorPanel {
     for (const [key] of GRADE_KEYS) {
       this.grade[key].disabled = !this.graded.input.checked;
     }
-    this.backdropOpacity.disabled = !this.backdrop.input.checked;
-    this.backdropColor.disabled = !this.backdrop.input.checked;
+    const on = this.backdrop.input.checked;
+    this.backdropOpacity.disabled = !on;
+    this.backdropSource.disabled = !on;
+    this.backdropColor.disabled = !on;
+    this.backdropColorField.hidden = this.backdropSource.value === "field";
   }
 }
 

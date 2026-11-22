@@ -138,6 +138,24 @@ describe("parseProjversorView", () => {
     ).toThrow("views.probe.config.style.particles.glow must be");
   });
 
+  it("accepts the speed shade and a field backdrop", () => {
+    const particles = {
+      speedShade: 0,
+      backdrop: { enabled: true, source: "field", opacity: 0.25 },
+    } as const;
+    expect(
+      parseProjversorView(view({ style: { particles } })).style?.particles,
+    ).toEqual(particles);
+    expect(() =>
+      parseProjversorView(view({ style: { particles: { speedShade: 2 } } })),
+    ).toThrow("views.probe.config.style.particles.speedShade must be");
+    expect(() =>
+      parseProjversorView(
+        view({ style: { particles: { backdrop: { source: "map" } } } }),
+      ),
+    ).toThrow("views.probe.config.style.particles.backdrop must be");
+  });
+
   it("rejects style keys projversor does not render", () => {
     expect(() =>
       parseProjversorView(view({ style: { renderMode: "raster" } })),

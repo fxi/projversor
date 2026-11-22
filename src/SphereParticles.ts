@@ -31,6 +31,8 @@ export interface ParticleStyle {
    * speed then sets their brightness; null colors by speed.
    */
   tint: GeoVideoField | null;
+  /** How much slow tinted particles darken, 0–1 (zartigl's speedShade). */
+  speedShade: number;
 }
 
 /**
@@ -201,6 +203,7 @@ export class SphereParticles {
       p.int("u_tinted", tinted ? 1 : 0);
       if (tinted) {
         p.vec2("u_tint_domain", ...style.tint!.domain);
+        p.float("u_speed_shade", style.speedShade);
       } else {
         // Unused, but kept off the units of other sampler types.
         p.int("u_tint0", 0);

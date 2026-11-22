@@ -67,7 +67,15 @@ const FOLLOW_LOADS = 3;
 /** Style keys projversor renders. */
 export const STYLE_SUPPORT = {
   palette: true,
-  particles: ["density", "speed", "fade", "grade", "backdrop", "glow"],
+  particles: [
+    "density",
+    "speed",
+    "fade",
+    "grade",
+    "backdrop",
+    "glow",
+    "speedShade",
+  ],
   raster: [
     "opacity",
     "vibrance",
@@ -181,6 +189,8 @@ export class FieldLayer {
   private openedValue = false;
   /** `u_solid` of the particle backdrop; alpha 0 when off. */
   private backdrop: [number, number, number, number] = [0, 0, 0, 0];
+  /** The backdrop shows the tint field rather than its flat color. */
+  private backdropField = false;
   private rasterOpacity = 1;
   private rasterVibrance = 0;
   /** Style's color domain over the archive's own, or null. */
@@ -739,6 +749,7 @@ export class FieldLayer {
       : null;
     this.revisionValue++;
     this.backdrop = backdropVec4(style.particles.backdrop);
+    this.backdropField = style.particles.backdrop.source === "field";
     this.trailFade.setBase(fadeToOpacity(style.particles.fade));
     // Paused particles redraw their trails with the new style.
     this.settle = this.settleFrames();
@@ -877,6 +888,7 @@ export class FieldLayer {
       drop: Math.min(DROP_RATE + this.redistribution, REDISTRIB_MAX_DROP),
       dropBump: DROP_RATE_BUMP,
       tint: this.tint,
+      speedShade: this.particleSettings.speedShade,
     };
     const advancing = this.clock.advancing;
     const animate = advancing || this.settle > 0;
@@ -890,10 +902,36 @@ export class FieldLayer {
         this.settle--;
       }
     }
-    if (this.backdrop[3] > 0) {
+    this.drawBackdrop(frame, field, ms);
+    this.particles.present(this.gradeValue, this.particleSettings.glow);
+  }
+
+  /**
+   * Fill under the trails: the flat color, or with a field source the tint
+   * field through the ramp, faded to the backdrop opacity, so the trails
+   * float over a faint map of what colors them. Untinted particles keep the
+   * flat color: their speed has no raster here.
+   */
+  private drawBackdrop(
+    frame: ViewFrame,
+    field: GeoVideoField,
+    ms: number,
+  ): void {
+    const opacity = this.backdrop[3];
+    if (opacity <= 0) {
+      return;
+    }
+    const tint = this.tint;
+    if (this.backdropField && tint && this.ramp) {
+      this.raster.draw(frame, tint, ms, {
+        ramp: this.ramp,
+        domain: tint.domain,
+        opacity,
+        vibrance: 0,
+      });
+    } else {
       this.raster.drawBackdrop(frame, field, ms, this.backdrop);
     }
-    this.particles.present(this.gradeValue, this.particleSettings.glow);
   }
 
   /** zartigl's drop-rate boost, from the per-frame zoom and center change. */
