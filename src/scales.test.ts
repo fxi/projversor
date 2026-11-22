@@ -7,7 +7,6 @@ import {
   timeTicks,
   formatUnit,
   linearTicks,
-  particleSpeedFactor,
   legendTicks,
   MAX_PARTICLES,
   particleCount,
@@ -162,18 +161,6 @@ describe("playheadLabel", () => {
       date: "MAR 2025",
       hour: "",
     });
-  });
-});
-
-describe("particleSpeedFactor", () => {
-  it("maps 0.5× to 0.2 and 5× to the natural particle speed", () => {
-    expect(particleSpeedFactor(0.5)).toBeCloseTo(0.2, 9);
-    expect(particleSpeedFactor(5)).toBeCloseTo(1, 9);
-  });
-
-  it("rises evenly on a log scale in between", () => {
-    expect(particleSpeedFactor(1)).toBeCloseTo(0.325, 3);
-    expect(particleSpeedFactor(2)).toBeCloseTo(0.527, 3);
   });
 });
 

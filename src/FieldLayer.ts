@@ -37,7 +37,7 @@ import {
   loadTintChunks,
   type ProjversorLayer,
 } from "./layers";
-import { particleCount, particleSpeedFactor, type RampOptions } from "./scales";
+import { particleCount, type RampOptions } from "./scales";
 import {
   visibleCap,
   type ParticleStyle,
@@ -878,8 +878,8 @@ export class FieldLayer {
     const style: ParticleStyle = {
       ramp,
       maxSpeed: field.maxSpeed,
-      // Playback speed drives the particles as well as the video.
-      speed: this.particleSettings.speed * particleSpeedFactor(this.speed),
+      // The style's own speed: playback only moves the clock.
+      speed: this.particleSettings.speed,
       count: particleCount(
         this.particleSettings,
         gl.drawingBufferWidth,

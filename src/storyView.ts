@@ -21,8 +21,8 @@ export interface ProjversorViewDefinition {
 /** How time moves in a projversor view. */
 export interface ProjversorViewPlayback {
   /**
-   * Playback multiplier, one of {@link SPEEDS} for the layer kind. On a
-   * vector layer it also scales the particles: see `particleSpeedFactor`.
+   * Playback multiplier, one of {@link SPEEDS} for the layer kind. It moves
+   * the clock only: particles keep their style's `particles.speed`.
    */
   speed?: number;
   /** ISO date of the playhead; the latest month when omitted. */
