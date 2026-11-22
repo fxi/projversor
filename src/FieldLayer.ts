@@ -5,6 +5,7 @@ import {
   resolveEntryStyle,
   resolveLayerStyle,
   sourceCoversTime,
+  styleForKind,
   type CatalogGeoVideoSource,
   type LayerStyle,
   type LayerStyleInput,
@@ -371,7 +372,10 @@ export class FieldLayer {
       tint?: string | null;
       /** Playback speed, applied with the layer when it is one of its kind. */
       speed?: number;
-      /** Style override replacing the current one. */
+      /**
+       * Style override replacing the current one; omitted keeps the current
+       * one, without the keys the new layer's kind cannot draw.
+       */
       style?: LayerStyleInput;
       /** Time window replacing the current one; null clears it. */
       timeRange?: TimeRange | null;
@@ -473,7 +477,11 @@ export class FieldLayer {
     this.chunksValue = chunks;
     this.timeRangeValue = range;
     this.rangeBounds = bounds;
-    this.restyle(options.style);
+    // A kept override loses what the new layer cannot draw (particles on a
+    // raster), so later edits merged into it still validate.
+    this.restyle(
+      options.style ?? styleForKind(this.viewStyleValue, layer.kind),
+    );
     this.clock.setKindSpeed(layer.kind, options.speed);
     this.host.emit("layer", layer);
     this.applyPalette(this.stylePalette(layer));
