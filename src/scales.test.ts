@@ -11,6 +11,7 @@ import {
   legendTicks,
   MAX_PARTICLES,
   particleCount,
+  rampConic,
   rampGradient,
   rampPosition,
 } from "./scales";
@@ -39,6 +40,20 @@ describe("rampGradient", () => {
     });
     expect(faded).toMatch(/^linear-gradient\(to top, #3a000700 0%/);
     expect(faded).toContain("repeating-conic-gradient");
+  });
+
+  it("draws in another direction on request", () => {
+    expect(rampGradient("plasma", {}, "to right")).toMatch(
+      /^linear-gradient\(to right, /,
+    );
+  });
+});
+
+describe("rampConic", () => {
+  it("wraps the palette around a circle, opaque even when faded", () => {
+    const swatch = rampConic("heat", { alphaFade: { low: 0.5 } });
+    expect(swatch).toMatch(/^conic-gradient\(from 0deg, #[0-9a-f]{6} 0%/);
+    expect(swatch).toMatch(/ 100%\)$/);
   });
 });
 

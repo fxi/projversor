@@ -60,6 +60,7 @@ export {
   linearTicks,
   monthLegend,
   playheadLabel,
+  rampConic,
   rampGradient,
   rampPosition,
   timeTicks,

@@ -105,12 +105,9 @@ const PARTICLE_PALETTE = "plasma";
  * Palettes offered for the particles: diverging and cyclic ramps carry no
  * meaning for a speed, and black trails vanish on the black background.
  */
-export const PARTICLE_PALETTES: PaletteMeta[] = getPalettes().filter(
-  (p) =>
-    p.id !== "mono-black" &&
-    !p.tags.includes("diverging") &&
-    !p.tags.includes("cyclic"),
-);
+export const PARTICLE_PALETTES: PaletteMeta[] = getPalettes({
+  excludeTags: ["diverging", "cyclic"],
+}).filter((p) => p.id !== "mono-black");
 
 /** Palettes offered for a scalar raster: any but black. */
 export const RASTER_PALETTES: PaletteMeta[] = getPalettes().filter(

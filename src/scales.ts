@@ -1,5 +1,6 @@
 import {
   formatUnit,
+  rampCss,
   resolveColorRamp,
   type AlphaFade,
 } from "@fxi/zartigl/engine";
@@ -11,20 +12,31 @@ export interface RampOptions {
 }
 
 /**
- * Css gradient of a palette, bottom to top, drawn as the field draws it.
- * Stops are sorted numerically: integer-like keys ("0", "1") would otherwise
- * enumerate first and scramble the gradient. A ramp with transparent stops
- * (#rrggbbaa) gets a checkerboard layer underneath, so the faded part reads
- * as see-through.
+ * Css gradient of a palette, low values at the start of `direction` (bottom
+ * by default), drawn as the field draws it (zartigl's `rampCss`). A ramp with
+ * transparent stops (#rrggbbaa) gets a checkerboard layer underneath, so the
+ * faded part reads as see-through.
  */
-export function rampGradient(palette: string, options?: RampOptions): string {
-  const colors = Object.entries(resolveColorRamp(palette, options))
-    .map(([stop, color]) => [Number(stop), color] as const)
-    .sort((a, b) => a[0] - b[0]);
-  const stops = colors.map(([stop, color]) => `${color} ${stop * 100}%`);
-  const gradient = `linear-gradient(to top, ${stops.join(", ")})`;
-  const alpha = colors.some(([, color]) => /^#[0-9a-f]{8}$/i.test(color));
+export function rampGradient(
+  palette: string,
+  options?: RampOptions,
+  direction = "to top",
+): string {
+  const gradient = rampCss(palette, { ...options, direction });
+  const colors = Object.values(resolveColorRamp(palette, options));
+  const alpha = colors.some((color) => /^#[0-9a-f]{8}$/i.test(color));
   return alpha ? `${gradient}, ${CHECKERBOARD}` : gradient;
+}
+
+/**
+ * Css conic gradient of a palette, clockwise from the top: the swatch of a
+ * round button. Opaque, so a faded end still names the palette.
+ */
+export function rampConic(palette: string, options?: RampOptions): string {
+  return rampCss(palette, { reverse: options?.reverse }).replace(
+    /^linear-gradient\(to right,/,
+    "conic-gradient(from 0deg,",
+  );
 }
 
 const CHECKERBOARD =
