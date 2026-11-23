@@ -255,20 +255,20 @@ export class Overlay {
     if (this.coastlines) {
       ctx.beginPath();
       path(coastlinesOf(land));
-      ctx.lineWidth = 0.8;
+      ctx.lineWidth = 0.5;
       ctx.strokeStyle = this.colors.coast;
       ctx.stroke();
     }
 
     ctx.beginPath();
     path(EQUATOR);
-    ctx.lineWidth = 1.2;
+    ctx.lineWidth = 0.5;
     ctx.strokeStyle = this.colors.equator;
     ctx.stroke();
 
     ctx.beginPath();
     path(SPHERE);
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 0.5;
     ctx.strokeStyle = this.colors.outline;
     ctx.stroke();
 
