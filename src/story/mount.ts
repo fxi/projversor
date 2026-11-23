@@ -180,6 +180,35 @@ function sceneCopy(scene: StoryScene): StoryCopyBlock | undefined {
 }
 
 /**
+ * A scene's theme on an element: its colours as the story's custom
+ * properties, and where its glow sits (`data-glow`, "none" without one).
+ * On a step it colours the step's own text; on the root, the stage and the
+ * key of the active scene.
+ */
+export function applyTheme(
+  el: HTMLElement,
+  theme: StoryDocument["themes"][string] | undefined,
+): void {
+  if (!theme) {
+    return;
+  }
+  const tokens: Record<string, string | undefined> = {
+    "--zs-bg": theme.background,
+    "--zs-ink": theme.foreground,
+    "--zs-muted": theme.muted,
+    "--zs-accent": theme.accent,
+    "--zs-accent-soft": theme.accentSoft,
+    "--zs-surface": theme.surface,
+  };
+  for (const [name, value] of Object.entries(tokens)) {
+    if (value) {
+      el.style.setProperty(name, value);
+    }
+  }
+  el.dataset.glow = theme.glowAnchor ?? "none";
+}
+
+/**
  * Whether a scene continues the chapter of the scene before it: both have a
  * copy block with the same heading in the page language. Not the opening.
  */
@@ -302,6 +331,9 @@ function renderStep(
   const text = doc.createElement("div");
   text.className = "zs-text";
   const copy = sceneCopy(scene);
+  // What lies behind the text: its soft halo, or a gradient panel.
+  step.dataset.backdrop = copy?.backdrop ?? "none";
+  applyTheme(step, story.themes[scene.theme]);
   // A prelude scene (`role: "prelude"`) has no kicker and no number.
   const kicker = (number: number) => {
     const el = doc.createElement("p");
@@ -336,10 +368,6 @@ function renderStep(
       name.className = "zs-sr";
       name.textContent = t.text(scene.name);
       text.append(name);
-    }
-    const theme = story.themes[scene.theme];
-    if (theme) {
-      step.style.setProperty("--zs-accent", theme.accent);
     }
     step.append(text);
     return step;
@@ -428,10 +456,6 @@ function renderStep(
       source.append(a);
     });
     text.append(source);
-  }
-  const theme = story.themes[scene.theme];
-  if (theme) {
-    step.style.setProperty("--zs-accent", theme.accent);
   }
   step.append(text);
   // Copy widgets close the text column; the others run along the top of
@@ -637,6 +661,9 @@ export async function mountStory<T extends StoryText>(
   root.setAttribute("aria-label", options.t.text(story.title));
   const stage = doc.createElement("div");
   stage.className = "zs-stage";
+  // The scene's glow over the map, under the veil (see applyTheme).
+  const tint = doc.createElement("div");
+  tint.className = "zs-tint";
   const veil = doc.createElement("div");
   veil.className = "zs-veil";
   const status = doc.createElement("p");
@@ -741,7 +768,7 @@ export async function mountStory<T extends StoryText>(
   steps.append(...content.stepEls);
   stageWidgets.append(...content.scenes.flatMap((part) => part.stage));
   let progress = progressOf(content);
-  stage.append(veil, stageWidgets, progress.element, status);
+  stage.append(tint, veil, stageWidgets, progress.element, status);
   root.append(stage, steps);
 
   // Attached first: the overlay reads its colors from the computed style.
@@ -1001,10 +1028,7 @@ export async function mountStory<T extends StoryText>(
     active = index;
     const shown = beginActivation(index);
     root.dataset.layout = scene.layout;
-    const accent = story.themes[scene.theme]?.accent;
-    if (accent) {
-      root.style.setProperty("--zs-accent", accent);
-    }
+    applyTheme(root, story.themes[scene.theme]);
     stepEls.forEach((el, i) => el.classList.toggle("is-active", i === index));
     progress.setActive(index, quiet);
     link?.set(index);

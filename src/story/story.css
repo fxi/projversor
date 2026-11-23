@@ -22,6 +22,24 @@
   initial-value: 58%;
 }
 
+@property --zs-glow-x {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 50%;
+}
+
+@property --zs-glow-y {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 50%;
+}
+
+@property --zs-accent-soft {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+
 .zs-story {
   --zs-bg: #030409;
   --zs-band: #000;
@@ -117,6 +135,58 @@
     --zs-veil-angle 1100ms var(--zs-ease),
     --zs-veil-solid 1100ms var(--zs-ease),
     --zs-veil-clear 1100ms var(--zs-ease);
+}
+
+/*
+ * The scene's glow (its theme's `glowAnchor`): a soft disc of the accent
+ * over the map, under the veil. Its place and colour are registered
+ * properties, so it travels and recolours from scene to scene; "none"
+ * fades it out.
+ */
+.zs-tint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at var(--zs-glow-x) var(--zs-glow-y),
+    var(--zs-accent-soft),
+    transparent 52%
+  );
+  opacity: 0;
+  transition:
+    opacity 900ms var(--zs-ease),
+    --zs-glow-x 1100ms var(--zs-ease),
+    --zs-glow-y 1100ms var(--zs-ease),
+    --zs-accent-soft 900ms var(--zs-ease);
+}
+
+.zs-story:not([data-glow="none"]) .zs-tint {
+  opacity: 1;
+}
+
+.zs-story[data-glow="center"] {
+  --zs-glow-x: 50%;
+  --zs-glow-y: 50%;
+}
+
+.zs-story[data-glow="top-left"] {
+  --zs-glow-x: 25%;
+  --zs-glow-y: 25%;
+}
+
+.zs-story[data-glow="top-right"] {
+  --zs-glow-x: 75%;
+  --zs-glow-y: 25%;
+}
+
+.zs-story[data-glow="bottom-left"] {
+  --zs-glow-x: 25%;
+  --zs-glow-y: 75%;
+}
+
+.zs-story[data-glow="bottom-right"] {
+  --zs-glow-x: 75%;
+  --zs-glow-y: 75%;
 }
 
 .zs-story[data-layout="intro"] {
@@ -464,7 +534,8 @@
   pointer-events: auto;
   max-width: 34rem;
   opacity: 0.18;
-  transition: opacity 700ms var(--zs-ease);
+  /* The scene left behind goes fast; the new one comes in with the stage. */
+  transition: opacity 200ms ease-out;
 }
 
 /* A soft shade behind the text: it reads where the sphere runs under it. */
@@ -482,8 +553,31 @@
   );
 }
 
+/* `backdrop: "dark-gradient"`: a panel from the text's side of the screen,
+   for text over a bright map, where the halo is not enough. */
+.zs-step[data-backdrop="dark-gradient"] .zs-text::before {
+  inset: -30vh -8rem -30vh -50vw;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--zs-bg) 90%, transparent) 0%,
+    color-mix(in srgb, var(--zs-bg) 80%, transparent) 60%,
+    transparent 100%
+  );
+}
+
+.zs-step[data-layout="right"][data-backdrop="dark-gradient"] .zs-text::before {
+  inset: -30vh -50vw -30vh -8rem;
+  background: linear-gradient(
+    270deg,
+    color-mix(in srgb, var(--zs-bg) 90%, transparent) 0%,
+    color-mix(in srgb, var(--zs-bg) 80%, transparent) 60%,
+    transparent 100%
+  );
+}
+
 .zs-step.is-active .zs-text {
   opacity: 1;
+  transition: opacity 600ms var(--zs-ease);
 }
 
 .zs-step[data-layout="intro"] .zs-text {
@@ -631,6 +725,26 @@ h1.zs-headline {
   .zs-step[data-layout="intro"] .zs-lede {
     margin-inline: 0;
   }
+  /* The text runs over the stage: a step that is not the scene does not
+     show, so nothing of the last scene stays under the key. */
+  .zs-step:not(.is-active) .zs-text {
+    opacity: 0;
+  }
+  /* All of it on a band: clear at its top, so the stage reads above the
+     text, then the background, so the text reads over any map. */
+  .zs-text::before,
+  .zs-step[data-layout][data-backdrop] .zs-text::before {
+    inset: -5rem -100vw -10vh calc(-1 * var(--zs-gutter));
+    background: linear-gradient(
+      to bottom,
+      transparent 0,
+      color-mix(in srgb, var(--zs-bg) 78%, transparent) 4.5rem,
+      color-mix(in srgb, var(--zs-bg) 86%, transparent) 100%
+    );
+  }
+  .zs-step[data-layout="intro"] :is(.zs-lede, .zs-source) {
+    text-shadow: none;
+  }
   .zs-progress {
     --track: 60svh;
     right: 4px;
@@ -646,7 +760,9 @@ h1.zs-headline {
 
 @media (prefers-reduced-motion: reduce) {
   .zs-veil,
+  .zs-tint,
   .zs-text,
+  .zs-step.is-active .zs-text,
   .zs-progress * {
     transition: none;
   }
@@ -830,6 +946,38 @@ h1.zs-headline {
 .zs-legend-unit {
   letter-spacing: 0;
   text-transform: none;
+}
+
+/*
+ * Short screens: what the reader can do without goes first. A phone under
+ * 720px tall drops the name of a single ramp (its unit stays; two ramps keep
+ * their names, they tell them apart); a landscape phone also drops the
+ * kicker's label (number and rule stay) and a continued scene's heading,
+ * and the heading itself shrinks.
+ */
+@media (max-width: 899px) and (max-height: 720px), (max-height: 520px) {
+  .zs-legend:not(:has(.zs-legend-ramp ~ .zs-legend-ramp)) .zs-legend-name {
+    display: none;
+  }
+  .zs-legend:not(:has(.zs-legend-ramp ~ .zs-legend-ramp)) .zs-legend-unit {
+    letter-spacing: 0.04em;
+  }
+}
+
+@media (max-height: 520px) {
+  .zs-kicker {
+    font-size: 0;
+  }
+  .zs-kicker > :is(.zs-index, .zs-rule) {
+    font-size: 11px;
+  }
+  .zs-step.is-continued .zs-headline {
+    display: none;
+  }
+  .zs-headline,
+  h1.zs-headline {
+    font-size: clamp(1.6rem, 7vh, 2.6rem);
+  }
 }
 
 .zs-legend-bar {

@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { parseLegendConfig, rampTicks } from "./legend";
 import { authoringGuide } from "./guide";
 import type { StoryScene } from "@fxi/story";
-import { parseStory, sceneAside, sceneCatalogId, sceneInset } from "./mount";
+import {
+  applyTheme,
+  parseStory,
+  sceneAside,
+  sceneCatalogId,
+  sceneInset,
+} from "./mount";
 import {
   fractionAt,
   monthTicks,
@@ -216,6 +222,63 @@ describe("authoringGuide", () => {
     // One line per layer id.
     const ids = [...guide.matchAll(/^\| `([^`]+)` \|/gm)].map((m) => m[1]);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("documents the glow and the text backdrop", () => {
+    const guide = authoringGuide();
+    expect(guide).toContain("`glowAnchor`");
+    expect(guide).toContain('"dark-gradient"');
+  });
+});
+
+describe("applyTheme", () => {
+  // The two parts of an element applyTheme writes: no DOM needed.
+  const element = () => {
+    const props = new Map<string, string>();
+    const el = {
+      style: {
+        setProperty: (name: string, value: string) => props.set(name, value),
+      },
+      dataset: {} as Record<string, string>,
+    };
+    return { el: el as unknown as HTMLElement, props, dataset: el.dataset };
+  };
+  const theme = {
+    background: "#030409",
+    foreground: "#eef4f8",
+    muted: "#8b99a8",
+    accent: "#9fd8ff",
+    accentSoft: "rgba(159, 216, 255, 0.18)",
+    surface: "rgba(3, 5, 9, 0.72)",
+  };
+
+  it("sets every colour of the theme as a story property", () => {
+    const { el, props } = element();
+    applyTheme(el, theme);
+    expect(Object.fromEntries(props)).toEqual({
+      "--zs-bg": "#030409",
+      "--zs-ink": "#eef4f8",
+      "--zs-muted": "#8b99a8",
+      "--zs-accent": "#9fd8ff",
+      "--zs-accent-soft": "rgba(159, 216, 255, 0.18)",
+      "--zs-surface": "rgba(3, 5, 9, 0.72)",
+    });
+  });
+
+  it("places the glow at the theme's anchor, none without one", () => {
+    const plain = element();
+    applyTheme(plain.el, theme);
+    expect(plain.dataset.glow).toBe("none");
+    const glowing = element();
+    applyTheme(glowing.el, { ...theme, glowAnchor: "top-right" });
+    expect(glowing.dataset.glow).toBe("top-right");
+  });
+
+  it("leaves the element as it is without a theme", () => {
+    const { el, props, dataset } = element();
+    applyTheme(el, undefined);
+    expect(props.size).toBe(0);
+    expect(dataset.glow).toBeUndefined();
   });
 });
 

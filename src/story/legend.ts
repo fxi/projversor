@@ -210,10 +210,13 @@ function ramp(doc: Document, label: string, className: string): Ramp {
   el.className = `zs-legend-ramp ${className}`;
   const head = doc.createElement("p");
   head.className = "zs-legend-label";
-  head.textContent = label;
+  // The name apart from the unit: a short screen drops the name, keeps the unit.
+  const name = doc.createElement("span");
+  name.className = "zs-legend-name";
+  name.textContent = label;
   const unit = doc.createElement("span");
   unit.className = "zs-legend-unit";
-  head.append(unit);
+  head.append(name, unit);
   const bar = doc.createElement("div");
   bar.className = "zs-legend-bar";
   const ticks = doc.createElement("div");
