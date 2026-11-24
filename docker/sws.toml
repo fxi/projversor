@@ -10,24 +10,25 @@ log-level = "info"
 # gzip, brotli or zstd, as the client accepts.
 compression = true
 
-# Our own Cache-Control below, not the built-in one (a year for any .js or .css).
-cache-control-headers = false
+# Built-in cache rules: a year for hashed build files (js, css, fonts, images),
+# and no-cache on errors, so a 404 for a chunk not yet rolled out is never kept.
+# What is read at runtime is set back to no-cache below.
+cache-control-headers = true
 
-# The apps route with #scene and ?query only: unknown paths are a plain 404.
 directory-listing = false
 redirect-trailing-slash = true
 ignore-hidden-files = true
 
 [advanced]
 
-# Everything (later rules win): revalidate, so a new deploy shows up at once.
+# Header globs match the served file (/ → /index.html), and `*` crosses `/`.
+# Later rules win, over the built-in ones too.
 [[advanced.headers]]
-source = "**"
+source = "**/*.{html,json,geojson}"
 [advanced.headers.headers]
 Cache-Control = "no-cache"
 
-# Hashed build output of each app: cached for good.
 [[advanced.headers]]
-source = "**/assets/**"
+source = "/healthz"
 [advanced.headers.headers]
-Cache-Control = "public, max-age=31536000, immutable"
+Cache-Control = "no-cache"
