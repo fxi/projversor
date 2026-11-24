@@ -127,7 +127,7 @@ builds them all into `dist-apps/<name>/`.
 
 ## Docker
 
-The image serves the apps with nginx on port 8080: the explorer at `/`,
+The image serves the apps with static-web-server on port 8080: the explorer at `/`,
 the story at `/story/` and the minimal page at `/minimal/` (`/healthz` for
 health checks).
 

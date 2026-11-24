@@ -5,8 +5,5 @@ services:
     ports:
       - "8080:8080"
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
+    # No container healthcheck: the image has no shell or wget.
+    # Probe http://<host>:8080/healthz from outside instead.
