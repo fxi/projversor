@@ -129,13 +129,16 @@ describe("adaptive camera transitions", () => {
     const now = vi.spyOn(performance, "now").mockReturnValue(0);
     const { camera: c } = camera(male);
     c.goTo({ preset: "north", zoom: 2.4, durationMs: 3000 });
-    c.animate(900);
+    // Mid-turn: a global flight blends projections while the globe turns.
+    c.animate(1500);
     const blend = { ...c.view.blend };
-    now.mockReturnValue(900);
+    expect(blend.t).toBeGreaterThan(0);
+    expect(blend.t).toBeLessThan(1);
+    now.mockReturnValue(1500);
     c.goTo({ preset: "south", zoom: 2.2, durationMs: 3000 });
-    c.animate(900);
+    c.animate(1500);
     expect(c.view.blend).toEqual(blend);
-    for (let t = 910; t <= 3900; t += 10) {
+    for (let t = 1510; t <= 4500; t += 10) {
       c.animate(t);
       expect(Number.isFinite(c.zoom)).toBe(true);
     }
@@ -150,7 +153,10 @@ describe("adaptive camera transitions", () => {
     c.goTo({ preset: "globe", rotate: [-20, 0, 0], zoom: 4, durationMs: 3000 });
     c.animate(1800);
     expect(c.zoom).not.toBe(4);
-    c.animate(3000);
+    // A flight may take longer than asked, never less.
+    c.animate(2990);
+    expect(c.zoom).not.toBe(4);
+    c.animate(6000);
     expect(c.zoom).toBe(4);
     c.goTo({ ...male, durationMs: 0 });
     expect(c.zoom).toBe(500);

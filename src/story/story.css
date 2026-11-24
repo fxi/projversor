@@ -563,6 +563,21 @@
     color-mix(in srgb, var(--zs-bg) 80%, transparent) 60%,
     transparent 100%
   );
+  /* Feathered top and bottom: the panel has no edge across the map. */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 25vh,
+    #000 calc(100% - 25vh),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 25vh,
+    #000 calc(100% - 25vh),
+    transparent
+  );
 }
 
 .zs-step[data-layout="right"][data-backdrop="dark-gradient"] .zs-text::before {
@@ -577,6 +592,23 @@
 
 .zs-step.is-active .zs-text {
   opacity: 1;
+  transition: opacity 600ms var(--zs-ease);
+}
+
+/* A scene that is not the reader's keeps only its kicker and heading, faint:
+   its body, widgets and shade would pile up over the map and the key. */
+.zs-text > *,
+.zs-text::before {
+  transition: opacity 200ms ease-out;
+}
+
+.zs-step:not(.is-active) .zs-text > :not(.zs-kicker, .zs-headline),
+.zs-step:not(.is-active) .zs-text::before {
+  opacity: 0;
+}
+
+.zs-step.is-active .zs-text > *,
+.zs-step.is-active .zs-text::before {
   transition: opacity 600ms var(--zs-ease);
 }
 
@@ -741,6 +773,8 @@ h1.zs-headline {
       color-mix(in srgb, var(--zs-bg) 78%, transparent) 4.5rem,
       color-mix(in srgb, var(--zs-bg) 86%, transparent) 100%
     );
+    -webkit-mask-image: none;
+    mask-image: none;
   }
   .zs-step[data-layout="intro"] :is(.zs-lede, .zs-source) {
     text-shadow: none;
@@ -763,6 +797,10 @@ h1.zs-headline {
   .zs-tint,
   .zs-text,
   .zs-step.is-active .zs-text,
+  .zs-text > *,
+  .zs-text::before,
+  .zs-step.is-active .zs-text > *,
+  .zs-step.is-active .zs-text::before,
   .zs-progress * {
     transition: none;
   }

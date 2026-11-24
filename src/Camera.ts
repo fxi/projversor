@@ -460,7 +460,7 @@ export class Camera {
     this.view.inset = lerpInset(
       step.from,
       step.to,
-      step.progress?.(eased) ?? eased,
+      step.progress?.(raw) ?? eased,
     );
     this.refit();
     if (raw >= 1) {
@@ -482,7 +482,8 @@ export class Camera {
     }
     const raw = Math.min(1, (now - transition.start) / transition.duration);
     const e = easeCubicInOut(raw);
-    const flight = transition.flight?.sample(e);
+    // A flight eases its own path.
+    const flight = transition.flight?.sample(raw);
     const progress = flight?.progress ?? e;
     this.view.blend.t = transition.blendAt?.(progress) ?? progress;
     this.view.rotate = transition.rotate(progress);
