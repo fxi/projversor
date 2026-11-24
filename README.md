@@ -132,7 +132,10 @@ the story at `/story/` and the minimal page at `/minimal/` (`/healthz` for
 health checks).
 
 ```bash
-docker compose up -d --build   # from this folder; open http://localhost:8080
+npm run docker:up              # or: docker compose up -d --build; open http://localhost:8080
+PORT=18080 npm run docker:up   # another host port
+npm run docker:logs            # follow the logs
+npm run docker:down            # stop and remove
 docker compose pull && docker compose up -d   # the published image
 ```
 

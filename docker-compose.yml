@@ -3,7 +3,7 @@ services:
     build: .
     image: ghcr.io/fxi/projversor:latest
     ports:
-      - "8080:8080"
+      - "${PORT:-8080}:8080"
     restart: unless-stopped
     # No container healthcheck: the image has no shell or wget.
     # Probe http://<host>:8080/healthz from outside instead.

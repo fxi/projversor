@@ -52,7 +52,10 @@
     "release:minor": "npm version minor && git push origin main --follow-tags",
     "release:major": "npm version major && git push origin main --follow-tags",
     "prepublishOnly": "npm run build:lib",
-    "dev:scroll": "vite --config apps/scroll/vite.config.ts"
+    "dev:scroll": "vite --config apps/scroll/vite.config.ts",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
   },
   "dependencies": {
     "@fxi/story": "^0.1.3",
