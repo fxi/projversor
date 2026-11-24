@@ -12,12 +12,15 @@ RUN npx vite build --config apps/explorer/vite.config.ts --base / \
  && npx vite build --config apps/minimal/vite.config.ts --base /minimal/ \
  && npx vite build --config apps/compare/vite.config.ts --base /compare/
 
-FROM nginxinc/nginx-unprivileged:alpine-slim
+# Official nginx image, run as its unprivileged "nginx" user (see docker/nginx.conf).
+# Not nginxinc/nginx-unprivileged: its rebuilds lag behind nginx security releases.
+FROM nginx:1.31-alpine-slim
+USER nginx
 LABEL org.opencontainers.image.title="projversor" \
       org.opencontainers.image.description="Projversor apps: catalog data on a sphere that morphs between world projections" \
       org.opencontainers.image.source="https://github.com/fxi/projversor" \
       org.opencontainers.image.licenses="MIT"
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY --from=build /src/dist-apps/explorer /usr/share/nginx/html
 COPY --from=build /src/dist-apps/story /usr/share/nginx/html/story
 COPY --from=build /src/dist-apps/minimal /usr/share/nginx/html/minimal
