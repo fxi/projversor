@@ -173,3 +173,56 @@ describe("adaptive camera transitions", () => {
     expect(c.zoom).toBe(250);
   });
 });
+
+describe("Camera.atDescent", () => {
+  type Rotate = [number, number, number];
+  const pacific = { preset: "globe", rotate: [105, 5, 0] as Rotate, zoom: 1.2 };
+  const male = {
+    preset: "globe",
+    rotate: [-73.47, -4.2, 0] as Rotate,
+    zoom: 500,
+  };
+
+  it("runs at once without a flight", () => {
+    const { camera: c } = camera(pacific);
+    const fn = vi.fn();
+    c.atDescent(fn);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for the flight to start down, then runs once", () => {
+    vi.spyOn(performance, "now").mockReturnValue(0);
+    const { camera: c } = camera(pacific);
+    c.goTo({ ...male, durationMs: 3000 });
+    const fn = vi.fn();
+    c.atDescent(fn);
+    let zoomAtCall = 0;
+    fn.mockImplementation(() => (zoomAtCall = c.zoom));
+    for (let t = 0; t <= 6000; t += 16) {
+      c.animate(t);
+    }
+    expect(fn).toHaveBeenCalledTimes(1);
+    // Still at globe altitude when it runs.
+    expect(zoomAtCall).toBeLessThan(1.5);
+  });
+
+  it("runs a held action when another move replaces the flight, and drops it on null", () => {
+    vi.spyOn(performance, "now").mockReturnValue(0);
+    const { camera: c } = camera(pacific);
+    c.goTo({ ...male, durationMs: 3000 });
+    const held = vi.fn();
+    c.atDescent(held);
+    c.animate(100);
+    expect(held).not.toHaveBeenCalled();
+    c.goTo({ ...pacific, durationMs: 3000 });
+    expect(held).toHaveBeenCalledTimes(1);
+
+    c.animate(10000);
+    c.goTo({ ...male, durationMs: 3000 });
+    const dropped = vi.fn();
+    c.atDescent(dropped);
+    c.atDescent(null);
+    c.animate(10000);
+    expect(dropped).not.toHaveBeenCalled();
+  });
+});

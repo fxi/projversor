@@ -86,6 +86,8 @@ export class Camera {
     flight?: FlightPath;
     blendAt?: (t: number) => number;
   } | null = null;
+  /** Held until the running flight starts down; see `atDescent`. */
+  private onDescent: (() => void) | null = null;
   private drag: {
     v0: Rotate;
     q0: ReturnType<typeof versor>;
@@ -187,8 +189,29 @@ export class Camera {
     }
   }
 
+  /**
+   * Run `fn` when the running flight starts down to its target, or now when
+   * no flight runs. It replaces any action still held; null drops it. A move
+   * that replaces the flight runs the held action first.
+   */
+  atDescent(fn: (() => void) | null): void {
+    this.onDescent = null;
+    if (fn && this.transition?.flight) {
+      this.onDescent = fn;
+    } else {
+      fn?.();
+    }
+  }
+
+  private flushDescent(): void {
+    const fn = this.onDescent;
+    this.onDescent = null;
+    fn?.();
+  }
+
   /** Show a preset, rotation and zoom at once. */
   jumpTo(target: ProjversorViewTarget): void {
+    this.flushDescent();
     const preset = findPreset(target.preset) ?? this.presetValue;
     const def = PROJECTIONS[preset.projection];
     if (target.inset) {
@@ -226,6 +249,7 @@ export class Camera {
     zoom: number,
     duration: number,
   ): void {
+    this.flushDescent();
     const { blend } = this.view;
     const to = PROJECTIONS[preset.projection];
     const { width, height } = viewArea(this.view);
@@ -308,6 +332,7 @@ export class Camera {
     if (this.transition && blend.a !== blend.b) {
       return;
     }
+    this.flushDescent();
     const from = this.view.rotate;
     this.transition = {
       start: performance.now(),
@@ -490,6 +515,9 @@ export class Camera {
     this.view.zoom =
       flight?.zoom ??
       transition.zoom[0] + (transition.zoom[1] - transition.zoom[0]) * e;
+    if (raw >= (transition.flight?.descent ?? 0)) {
+      this.flushDescent();
+    }
     if (raw >= 1) {
       this.view.zoom = transition.zoom[1];
       const { a, b, ka, kb, t } = this.view.blend;

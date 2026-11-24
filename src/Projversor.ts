@@ -766,11 +766,9 @@ export class Projversor {
   /** Change the view and playback; a preset morphs the projection. */
   async update(state: ProjversorState): Promise<void> {
     const stage = this.requireStage();
-    if (state.coastlines !== undefined) {
-      if (typeof state.coastlines !== "boolean") {
-        throw new Error("projversor coastlines must be a boolean");
-      }
-      stage.setCoastlines(state.coastlines);
+    const { coastlines } = state;
+    if (coastlines !== undefined && typeof coastlines !== "boolean") {
+      throw new Error("projversor coastlines must be a boolean");
     }
     const { animate = true, durationMs } = state;
     const { preset, rotate, zoom, inset } = state;
@@ -785,6 +783,17 @@ export class Projversor {
         stage.camera.goTo(target);
       } else {
         stage.camera.jumpTo(target);
+      }
+    }
+    if (coastlines !== undefined) {
+      // Coastlines guide a flight: they go only once it starts down, and
+      // come back at once.
+      const apply = () => stage.setCoastlines(coastlines);
+      if (coastlines) {
+        stage.camera.atDescent(null);
+        apply();
+      } else {
+        stage.camera.atDescent(apply);
       }
     }
     if (state.colors !== undefined) {

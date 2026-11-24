@@ -82,6 +82,13 @@ describe("regional flights", () => {
       expect(Math.min(...low.map((p) => p.progress))).toBeGreaterThan(0.95);
       const half = samples.find((p) => p.progress >= 0.5)!;
       expect(half.zoom).toBeLessThanOrEqual(1.2);
+      // The descent starts at globe altitude, after the turn has begun.
+      expect(path.descent).toBeGreaterThan(0.3);
+      expect(path.descent).toBeLessThan(1);
+      expect(path.sample(path.descent).zoom).toBeLessThan(1);
+      expect(path.sample(path.descent + 0.05).zoom).toBeGreaterThan(
+        path.sample(path.descent).zoom,
+      );
       expect(
         samples.every((p, i) => !i || p.progress >= samples[i - 1].progress),
       ).toBe(true);

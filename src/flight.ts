@@ -5,6 +5,8 @@ type Pose = { rotate: readonly [number, number, number]; zoom: number };
 /** Coupled rotation progress and zoom of a flight. */
 export interface FlightPath {
   durationMs: number;
+  /** Linear time in [0, 1] at which the camera starts down to its target. */
+  descent: number;
   /** Pose at linear time `t` in [0, 1]; the path carries its own easing. */
   sample(t: number): { progress: number; zoom: number };
 }
@@ -75,6 +77,7 @@ function globalFlight(
     durationMs: Math.round(
       Number.isFinite(requestedMs) ? Math.max(requestedMs, shortest) : shortest,
     ),
+    descent: down ? 1 - down : 1,
     sample(t) {
       if (t <= 0) {
         return { progress: 0, zoom: z0 };
@@ -113,23 +116,34 @@ function regionalFlight(
   const distance = angle / 2;
   const interpolate = regionalZoom([0, 0, 1 / z0], [distance, 0, 1 / z1]);
   const minimum = Math.min(2, z0, z1);
+  const sample = (t: number) => {
+    if (t <= 0) {
+      return { progress: 0, zoom: z0 };
+    }
+    if (t >= 1) {
+      return { progress: 1, zoom: z1 };
+    }
+    const [x, , width] = interpolate(easeCubicInOut(t));
+    return {
+      progress: Math.max(0, Math.min(1, x / distance)),
+      zoom: Math.max(minimum, 1 / width),
+    };
+  };
+  // The descent starts at the highest point of the path.
+  let descent = 0;
+  for (let i = 1, lowest = z0; i <= 100; i++) {
+    const { zoom } = sample(i / 100);
+    if (zoom < lowest) {
+      lowest = zoom;
+      descent = i / 100;
+    }
+  }
   return {
     durationMs: Math.min(
       requestedMs,
       Math.max(1000, Math.min(1800, Math.abs(interpolate.duration) * 0.4)),
     ),
-    sample(t) {
-      if (t <= 0) {
-        return { progress: 0, zoom: z0 };
-      }
-      if (t >= 1) {
-        return { progress: 1, zoom: z1 };
-      }
-      const [x, , width] = interpolate(easeCubicInOut(t));
-      return {
-        progress: Math.max(0, Math.min(1, x / distance)),
-        zoom: Math.max(minimum, 1 / width),
-      };
-    },
+    descent,
+    sample,
   };
 }
