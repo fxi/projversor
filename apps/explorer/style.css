@@ -7,7 +7,8 @@
   --ocean: #000;
   --land: #000;
   /*--coast: var(--muted);*/
-  --coast: var(--line);;
+  /*--coast: var(--line);;*/
+  --coast: rgba(255, 255, 255, 1);
   --outline: var(--graticule);
   --graticule: rgba(255, 255, 255, 0.1);
   --equator: rgba(255, 196, 92, 0.6);
